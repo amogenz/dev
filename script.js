@@ -2,9 +2,14 @@ let client;
 let myName = "";
 let myRoom = "";
 let storageTopic = ""; 
+// TOPIC KHUSUS BROADCAST ADMIN (GLOBAL)
+const broadcastTopic = "aksara-global-v1/announcements";
 
 const notifAudio = document.getElementById('notifSound');
 const sentAudio = document.getElementById('sentSound');
+
+// --- PASSWORD ADMIN (GANTI DISINI) ---
+const ADMIN_PASS = "amogenz123";
 
 let mediaRecorder, audioChunks = [], isRecording = false, audioBlobData = null;
 let isSoundOn = true;
@@ -14,7 +19,7 @@ let onlineUsers = {};
 let typingTimeout;
 let localChatHistory = []; 
 
-// --- TOAST FUNCTION (NO ALERT) ---
+// --- TOAST FUNCTION ---
 function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container');
     const toast = document.createElement('div');
@@ -66,13 +71,26 @@ function startChat() {
 
     client.on('connect', () => {
         document.getElementById('typing-indicator').innerText = "";
-        client.subscribe(myRoom); client.subscribe(storageTopic);
+        client.subscribe(myRoom); 
+        client.subscribe(storageTopic);
+        client.subscribe(broadcastTopic); // Subscribe ke Channel Admin Global
+        
         publishMessage("bergabung.", 'system');
         setInterval(() => { client.publish(myRoom, JSON.stringify({ type: 'ping', user: myName })); cleanOnlineList(); }, 10000);
     });
 
     client.on('message', (topic, message) => {
         const msgString = message.toString();
+        
+        // Pesan Broadcast Admin (Global)
+        if (topic === broadcastTopic) {
+            try {
+                const data = JSON.parse(msgString);
+                displaySingleMessage(data); // Tampilkan langsung
+            } catch(e) {}
+            return;
+        }
+
         if (topic === storageTopic) { try { const srv = JSON.parse(msgString); if (Array.isArray(srv)) mergeWithLocal(srv); } catch(e) {} return; }
         if (topic === myRoom) { try { const data = JSON.parse(msgString); if (data.type === 'ping') { updateOnlineList(data.user); return; } if (data.type === 'typing') { showTyping(data.user); return; } handleIncomingMessage(data); } catch(e) {} }
     });
@@ -81,7 +99,7 @@ function startChat() {
 function loadFromLocal() { const saved = localStorage.getItem(getStorageKey()); if (saved) { localChatHistory = JSON.parse(saved); renderChat(); } }
 function saveToLocal() { localStorage.setItem(getStorageKey(), JSON.stringify(localChatHistory)); }
 function handleIncomingMessage(data) {
-    if(data.type !== 'system') {
+    if(data.type !== 'system' && data.type !== 'admin') {
         if (!localChatHistory.some(msg => msg.id === data.id)) {
             localChatHistory.push(data);
             if (localChatHistory.length > 77) localChatHistory = localChatHistory.slice(-77); 
@@ -122,13 +140,46 @@ function publishMessage(content, type = 'text', caption = '') {
     const time = now.getHours().toString().padStart(2,'0') + ":" + now.getMinutes().toString().padStart(2,'0');
     const msgId = 'msg-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
     const payload = { id: msgId, user: myName, content: content, type: type, caption: caption, time: time, reply: replyingTo, timestamp: Date.now() };
+    
+    // LOGIKA KIRIM KE MANA (GLOBAL vs ROOM)
+    const topicTarget = (type === 'admin') ? broadcastTopic : myRoom;
+
     try { 
-        client.publish(myRoom, JSON.stringify(payload)); 
-        if (isSoundOn && type !== 'system') { sentAudio.volume = 0.4; sentAudio.currentTime = 0; sentAudio.play().catch(() => {}); }
+        client.publish(topicTarget, JSON.stringify(payload)); 
+        // SOUND
+        if (isSoundOn && type !== 'system' && type !== 'admin') { sentAudio.volume = 0.4; sentAudio.currentTime = 0; sentAudio.play().catch(() => {}); }
     } catch(e) { showToast("Gagal mengirim!", "error"); }
-    cancelReply();
+    
+    if (type !== 'admin') cancelReply();
 }
-function sendMessage() { const input = document.getElementById('msg-input'); const text = input.value.trim(); if (text) { publishMessage(text, 'text'); input.value = ''; input.style.height = 'auto'; input.focus(); } }
+
+function sendMessage() {
+    const input = document.getElementById('msg-input');
+    const text = input.value.trim();
+    
+    if (!text) return;
+
+    // --- DETEKSI PESAN ADMIN ---
+    if (text.startsWith('/admin')) {
+        const parts = text.split(' ');
+        const pass = parts[1];
+        const messageContent = parts.slice(2).join(' ');
+
+        if (pass === ADMIN_PASS && messageContent) {
+            publishMessage(messageContent, 'admin');
+            showToast("Broadcast Admin Terkirim!", "success");
+        } else {
+            showToast("Password Admin Salah!", "error");
+        }
+        input.value = ''; input.style.height = 'auto'; input.focus();
+        return;
+    }
+    // ---------------------------
+
+    publishMessage(text, 'text'); 
+    input.value = ''; input.style.height = 'auto'; input.focus();
+}
+
 function handleEnter(e) { if (e.key === 'Enter' && !e.shiftKey && sendOnEnter) { e.preventDefault(); sendMessage(); } }
 
 function setReply(id, user, text) { replyingTo = { id: id, user: user, text: text }; document.getElementById('reply-preview-bar').style.display = 'flex'; document.getElementById('reply-to-user').innerText = user; document.getElementById('reply-preview-text').innerText = text.substring(0,50)+'...'; document.getElementById('msg-input').focus(); }
@@ -166,9 +217,24 @@ function closeLightbox(e) { if (e.target.classList.contains('lightbox-close') ||
 function displaySingleMessage(data) {
     const chatBox = document.getElementById('messages'); const div = document.createElement('div'); const isMe = data.user === myName;
     if (data.id) div.id = data.id;
-    if ((Date.now() - data.timestamp) < 3000 && !isMe && data.type !== 'system') { if (isSoundOn) { notifAudio.currentTime=0; notifAudio.play().catch(()=>{}); } }
+    
+    // Notif Suara untuk pesan baru
+    if ((Date.now() - data.timestamp) < 3000 && !isMe) { 
+        if (isSoundOn) { notifAudio.currentTime=0; notifAudio.play().catch(()=>{}); } 
+    }
 
-    if (data.type === 'system') { div.style.textAlign='center'; div.style.fontSize='11px'; div.style.color='#fff'; div.style.opacity='0.7'; div.style.margin='10px 0'; div.innerText=`${data.user} ${data.content}`; } 
+    if (data.type === 'system') { 
+        div.style.textAlign='center'; div.style.fontSize='11px'; div.style.color='#fff'; div.style.opacity='0.7'; div.style.margin='10px 0'; 
+        div.innerText=`${data.user} ${data.content}`; 
+    } 
+    else if (data.type === 'admin') {
+        div.className = 'message admin';
+        div.innerHTML = `
+            <div class="admin-badge"><i class="material-icons" style="font-size:14px">verified</i> OFFICIAL</div>
+            <div class="admin-content">${data.content.replace(/\n/g,'<br>')}</div>
+            <div class="admin-time">${data.time}</div>
+        `;
+    }
     else {
         div.className = isMe ? 'message right' : 'message left';
         let contentHtml = "";
@@ -181,8 +247,11 @@ function displaySingleMessage(data) {
 
         div.innerHTML = `<span class="sender-name">${data.user}</span>${replyHtml}<div>${contentHtml}</div><div class="time-info">${data.time} ${replyBtn}</div>`;
     }
+    
     chatBox.appendChild(div);
+    
+    // Smart Scroll: Hanya scroll otomatis jika user di bawah atau pesan admin/sendiri
     const isAtBottom = (chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight) < 150;
-    if (isAtBottom || isMe) chatBox.scrollTop = chatBox.scrollHeight;
+    if (isAtBottom || isMe || data.type === 'admin') chatBox.scrollTop = chatBox.scrollHeight;
 }
 function leaveRoom() { if(confirm("Keluar?")) { publishMessage("telah keluar.", 'system'); clearChatHistory(); localStorage.removeItem('aksara_name'); localStorage.removeItem('aksara_room'); location.reload(); } }
