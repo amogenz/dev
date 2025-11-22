@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
+    <title>Aksara iOS Glass</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
+    <style>
+        /* --- 1. CSS VARIABLES & RESET (iOS THEME) --- */
+        :root {
+            --ios-blue: #007AFF;
+            --ios-green: #34C759;
+            --ios-red: #FF3B30;
+            --ios-gray: #8E8E93;
+            --glass-bg: rgba(255, 255, 255, 0.75);
+            --glass-border: rgba(255, 255, 255, 0.4);
+            --glass-blur: 20px;
+            --msg-sent: linear-gradient(135deg, #007AFF, #005EC4);
+            --msg-received: rgba(255, 255, 255, 0.7);
+            --text-primary: #000;
+            --text-secondary: rgba(0,0,0,0.5);
+            --shadow-sm: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        * { 
+            box-sizing: border-box; 
+            -webkit-tap-highlight-color: transparent; 
+            outline: none;
+        }
+
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0; 
+            /* Wallpaper Default Abstrak iOS */
+            background: url('https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=2029&auto=format&fit=crop') no-repeat center center fixed;
+            background-size: cover;
+            color: var(--text-primary); 
+            height: 100dvh; /* Gunakan dynamic viewport height */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        /* --- 2. MAIN GLASS CONTAINER --- */
+        .app-glass-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            position: relative;
+            background: rgba(255, 255, 255, 0.1);
+            overflow: hidden;
+        }
+
+        /* Desktop Mode: Floating Window style */
+        @media (min-width: 900px) {
+            .app-glass-container {
+                width: 95%;
+                height: 90vh;
+                max-width: 1400px;
+                border-radius: 24px;
+                border: 1px solid var(--glass-border);
+                box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+                backdrop-filter: blur(var(--glass-blur));
+            }
+            #sidebar {
+                position: relative !important;
+                left: 0 !important;
+                width: 350px !important;
+                background: rgba(255, 255, 255, 0.5) !important;
+            }
+            #sidebar-overlay { display: none !important; }
+            .icon-btn-glass[onclick="toggleSidebar()"] { display: none; }
+        }
+
+        /* --- 3. LOGIN SCREEN (MODAL GLASS) --- */
+        #login-screen { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 2000; 
+            background: rgba(0,0,0,0.2);
+            backdrop-filter: blur(15px);
+            display: flex; justify-content: center; align-items: center;
+            flex-direction: column;
+        }
+
+        .login-box { 
+            background: rgba(255, 255, 255, 0.8); 
+            padding: 40px 30px; 
+            border-radius: 24px; 
+            width: 90%; max-width: 350px; 
+            text-align: center; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            border: 1px solid rgba(255,255,255,0.5);
+        }
+
+        .login-logo { width: 80px; margin-bottom: 10px; border-radius: 18px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .login-box h2 { margin: 0; font-weight: 700; letter-spacing: -0.5px; color: #000; }
+
+        .input-group {
+            background: rgba(0,0,0,0.05);
+            border-radius: 12px;
+            display: flex; align-items: center;
+            margin-bottom: 12px; padding: 0 12px;
+            transition: 0.2s;
+        }
+        .input-group:focus-within { background: #fff; box-shadow: 0 0 0 2px var(--ios-blue); }
+        .input-group i { color: var(--ios-gray); font-size: 20px; }
+        .input-group input {
+            width: 100%; padding: 14px 10px; border: none; background: transparent;
+            font-size: 15px; color: #000;
+        }
+
+        .btn-start { 
+            width: 100%; padding: 14px; 
+            background: var(--ios-blue); color: #fff; 
+            border: none; border-radius: 12px; 
+            font-weight: 600; font-size: 16px; margin-top: 10px; cursor: pointer;
+            transition: 0.2s;
+        }
+        .btn-start:active { transform: scale(0.98); opacity: 0.9; }
+        
+        .branding-footer { margin-top: 20px; font-size: 12px; color: rgba(255,255,255,0.8); text-transform: uppercase; letter-spacing: 1px; }
+
+        /* --- 4. SIDEBAR (FROSTED) --- */
+        #sidebar-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.3); z-index: 998; display: none;
+            backdrop-filter: blur(2px);
+        }
+
+        #sidebar {
+            position: absolute; top: 0; left: -350px; width: 280px; height: 100%;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(20px);
+            z-index: 999; 
+            transition: left 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+            border-right: 1px solid rgba(0,0,0,0.05);
+            display: flex; flex-direction: column; padding: 20px;
+        }
+        #sidebar.active { left: 0; }
+
+        .user-profile { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+        .avatar-circle { 
+            width: 50px; height: 50px; background: linear-gradient(135deg, #FF9966, #FF5E62);
+            border-radius: 50%; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 20px;
+        }
+        .user-info h3 { font-size: 16px; margin: 0; font-weight: 600; color: #000; }
+        .user-info span { font-size: 13px; color: var(--ios-gray); }
+
+        .stats-box {
+            background: rgba(255,255,255,0.5); border-radius: 12px; padding: 12px;
+            text-align: center; margin-bottom: 20px; border: 1px solid rgba(0,0,0,0.05);
+        }
+        .stats-number { font-size: 18px; font-weight: 700; color: var(--ios-blue); font-family: monospace; }
+        .stats-label { font-size: 10px; text-transform: uppercase; color: var(--ios-gray); display: block; }
+
+        /* Settings */
+        .permission-btn, .reset-btn {
+            width: 100%; padding: 10px; background: transparent; border: none;
+            text-align: left; font-size: 14px; color: var(--text-primary);
+            display: flex; align-items: center; gap: 10px; cursor: pointer; border-radius: 8px;
+        }
+        .permission-btn:hover { background: rgba(0,0,0,0.05); }
+        .permission-btn i { color: var(--ios-blue); }
+        .reset-btn { color: var(--ios-red); justify-content: center; margin-top: 5px; font-size: 13px; }
+
+        .setting-row { display: flex; justify-content: space-between; align-items: center; margin: 12px 0; font-size: 14px; }
+        .setting-row i { vertical-align: middle; color: var(--ios-gray); margin-right: 5px; }
+
+        /* Toggle Switch iOS */
+        .switch { position: relative; width: 40px; height: 24px; display: inline-block; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: #e5e5ea; border-radius: 24px; transition: .3s; }
+        .slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 2px; bottom: 2px; background-color: white; border-radius: 50%; transition: .3s; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        input:checked + .slider { background-color: var(--ios-green); }
+        input:checked + .slider:before { transform: translateX(16px); }
+
+        .online-section { flex: 1; overflow-y: auto; margin-top: 10px; }
+        .online-section h4 { font-size: 13px; color: var(--ios-gray); margin-bottom: 10px; }
+        #online-list { list-style: none; padding: 0; }
+        #online-list li { font-size: 14px; margin-bottom: 5px; color: #000; display: flex; align-items: center; gap: 5px; }
+
+        .logout { margin-top: auto; background: rgba(255, 59, 48, 0.1); color: var(--ios-red); font-weight: 600; display: flex; justify-content: center; gap: 8px; padding: 12px; border: none; border-radius: 12px; cursor: pointer; }
+
+        /* --- 5. CHAT SCREEN --- */
+        #chat-screen { 
+            flex: 1; display: none; flex-direction: column; height: 100%; 
+            background: transparent; 
+            position: relative;
+        }
+
+        header { 
+            height: 60px; padding: 0 15px;
+            display: flex; align-items: center; justify-content: space-between;
+            background: rgba(255, 255, 255, 0.5);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255,255,255,0.3);
+            z-index: 10;
+        }
+
+        .header-left { display: flex; align-items: center; gap: 10px; }
+        .header-right { display: flex; align-items: center; gap: 10px; }
+        
+        .icon-btn-glass { 
+            width: 35px; height: 35px; border-radius: 50%; 
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; color: var(--ios-blue); 
+            transition: 0.2s;
+        }
+        .icon-btn-glass:hover { background: rgba(0,0,0,0.05); }
+
+        .title-row { display: flex; align-items: center; gap: 4px; }
+        .header-title-text { font-weight: 600; font-size: 16px; color: #000; }
+        .verified-icon { font-size: 14px; color: var(--ios-blue); }
+        .room-status { font-size: 12px; color: var(--text-secondary); background: rgba(0,0,0,0.05); padding: 2px 8px; border-radius: 10px; }
+        #typing-indicator { font-size: 11px; color: var(--text-secondary); font-style: italic; }
+
+        /* --- 6. MESSAGES AREA --- */
+        #messages { 
+            flex: 1; overflow-y: auto; padding: 15px; padding-bottom: 100px; 
+            display: flex; flex-direction: column; gap: 6px;
+            scroll-behavior: smooth;
+        }
+
+        .welcome-msg { 
+            text-align: center; font-size: 12px; color: white; opacity: 0.8;
+            background: rgba(0,0,0,0.2); padding: 5px 15px; border-radius: 20px; 
+            align-self: center; margin: 10px 0;
+        }
+
+        /* BUBBLES */
+        .message { 
+            max-width: 75%; padding: 8px 14px; 
+            font-size: 15px; line-height: 1.4; position: relative;
+            box-shadow: var(--shadow-sm);
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            word-wrap: break-word;
+        }
+        @keyframes popIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+
+        .message.left { 
+            align-self: flex-start; 
+            background: var(--msg-received); 
+            color: black;
+            border-radius: 18px 18px 18px 4px; 
+            backdrop-filter: blur(10px);
+        }
+        .message.right { 
+            align-self: flex-end; 
+            background: var(--msg-sent); 
+            color: white;
+            border-radius: 18px 18px 4px 18px; 
+        }
+
+        .sender-name { display: block; font-size: 10px; font-weight: bold; margin-bottom: 2px; }
+        .message.left .sender-name { color: var(--ios-gray); }
+        .message.right .sender-name { display: none; }
+
+        .time-info { 
+            font-size: 10px; display: flex; justify-content: flex-end; align-items: center; opacity: 0.6; margin-top: 4px; gap: 4px;
+        }
+        .message.right .time-info { color: rgba(255,255,255,0.9); }
+        
+        .msg-content { white-space: pre-wrap; }
+
+        /* FLASH EFFECT FOR JUMP */
+        @keyframes flashMsg {
+            0% { background-color: var(--ios-green); }
+            100% { background-color: transparent; }
+        }
+        .flash-highlight { animation: flashMsg 1s ease-out; }
+
+        /* MEDIA */
+        .chat-image { border-radius: 12px; max-width: 100%; margin-top: 5px; }
+        audio { height: 35px; width: 200px; filter: none; margin-top: 5px; outline: none;}
+        
+        /* REPLY QUOTE */
+        .reply-quote {
+            border-left: 3px solid var(--ios-blue);
+            background: rgba(0,0,0,0.05);
+            padding: 4px 8px; border-radius: 4px;
+            margin-bottom: 4px; cursor: pointer;
+        }
+        .message.right .reply-quote { background: rgba(255,255,255,0.2); border-left-color: white; }
+        .reply-content b { font-size: 11px; display: block; }
+        .reply-content span { font-size: 12px; opacity: 0.8; }
+        .reply-btn { font-size: 14px; margin-left: 5px; cursor: pointer; opacity: 0.7; }
+
+        /* --- 7. INPUT AREA (FLOATING CAPSULE) --- */
+        .footer-container {
+            position: absolute; bottom: 0; width: 100%;
+            padding: 10px 15px 20px 15px;
+            background: linear-gradient(to top, rgba(255,255,255,0.8) 0%, transparent 100%);
+            z-index: 20;
+            display: flex; flex-direction: column; gap: 8px;
+        }
+
+        .input-area {
+            display: flex; align-items: flex-end; gap: 8px;
+        }
+
+        .input-wrapper-glass {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.65);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255,255,255,0.5);
+            border-radius: 24px;
+            padding: 4px 8px;
+            display: flex; align-items: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            min-height: 40px;
+        }
+
+        #msg-input {
+            flex: 1; border: none; background: transparent;
+            padding: 8px; font-size: 16px; max-height: 100px; resize: none;
+            color: #000; font-family: inherit;
+        }
+
+        .icon-btn { 
+            color: var(--ios-gray); padding: 8px; border-radius: 50%; 
+            background: rgba(255,255,255,0.5); border: none; cursor: pointer; transition: 0.2s;
+            width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+        .icon-btn:hover { color: var(--ios-blue); background: white; }
+        .icon-btn-mini { background: none; border: none; color: var(--ios-gray); cursor: pointer; padding: 5px; }
+        .icon-btn-mini:hover { color: var(--ios-red); }
+
+        #send-btn {
+            width: 40px; height: 40px; border-radius: 50%;
+            background: var(--ios-blue); color: white;
+            border: none; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 4px 10px rgba(0, 122, 255, 0.3);
+            transition: 0.2s; flex-shrink: 0;
+        }
+        #send-btn:active { transform: scale(0.9); }
+
+        .recording { color: var(--ios-red) !important; animation: pulse 1s infinite; }
+        @keyframes pulse { 0% {opacity: 1;} 50% {opacity: 0.5;} 100% {opacity: 1;} }
+
+        /* PREVIEW BARS */
+        #reply-preview-bar, #vn-preview-bar {
+            background: rgba(255,255,255,0.9); backdrop-filter: blur(10px);
+            padding: 10px; border-radius: 16px; margin-bottom: 5px;
+            display: none; align-items: center; gap: 10px;
+            border: 1px solid rgba(255,255,255,0.4);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        .reply-line { width: 3px; height: 30px; background: var(--ios-blue); border-radius: 2px; }
+        .btn-circle { width: 30px; height: 30px; border-radius: 50%; border: none; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; margin-left: 5px; }
+        .green { background: var(--ios-green); }
+        .red { background: var(--ios-red); }
+        .vn-actions { display: flex; margin-left: auto; }
+
+        /* MODAL PREVIEW IMG */
+        #image-preview-modal { 
+            background: rgba(0,0,0,0.8); backdrop-filter: blur(10px); 
+            display: none; position: fixed; top:0; left:0; width:100%; height:100%;
+            z-index: 3000; flex-direction: column;
+        }
+        .preview-content { display: flex; flex-direction: column; height: 100%; width: 100%; }
+        .preview-header { background: transparent; padding: 20px; display: flex; justify-content: space-between; color: white; }
+        .preview-body { flex: 1; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+        #preview-img { max-width: 100%; max-height: 100%; object-fit: contain; }
+        .preview-footer { background: transparent; padding: 20px; display: flex; gap: 10px; }
+        #img-caption { flex: 1; background: rgba(255,255,255,0.2); border-radius: 20px; border: 1px solid rgba(255,255,255,0.1); padding: 10px; color: white; }
+        #btn-send-img { background: var(--ios-blue); color: white; width: 45px; height: 45px; border-radius: 50%; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center;}
+        .close-btn { background: none; border: none; color: white; cursor: pointer; }
+
+        /* MOBILE TWEAKS */
+        @media (max-width: 899px) {
+            .app-glass-container { border-radius: 0; border: none; }
+            .login-box { width: 85%; }
+            .message { max-width: 85%; }
+        }
+    </style>
+</head>
+<body>
+
+    <audio id="notifSound" src="https://cdn.freesound.org/previews/553/553347_11636504-lq.mp3" preload="auto"></audio>
+
+    <div id="image-preview-modal">
+        <div class="preview-content">
+            <div class="preview-header">
+                <span>Kirim Gambar</span>
+                <button class="close-btn" onclick="cancelImagePreview()">
+                    <i class="material-icons">close</i>
+                </button>
+            </div>
+            <div class="preview-body">
+                <img id="preview-img" src="" alt="Preview">
+            </div>
+            <div class="preview-footer">
+                <input type="text" id="img-caption" placeholder="Tambah keterangan..." autocomplete="off">
+                <button id="btn-send-img" onclick="sendImageWithCaption()">
+                    <i class="material-icons">send</i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="login-screen">
+        <div class="login-box">
+            <img src="https://i.imgur.com/Ct0pzwl.png" alt="Logo" class="login-logo">
+            <h2>AKSARA</h2>
+            <p style="font-size: 14px; opacity: 0.5; margin-bottom: 20px; color:#000;">iOS Glass Edition</p>
+            <div class="input-group">
+                <i class="material-icons">person</i>
+                <input type="text" id="username" placeholder="Nama Panggilan" autocomplete="off">
+            </div>
+            <div class="input-group">
+                <i class="material-icons">tag</i>
+                <input type="text" id="room" placeholder="Nama Ruang (Grup)" autocomplete="off">
+            </div>
+            <button class="btn-start" onclick="startChat()">Join Chat</button>
+        </div>
+        <div class="branding-footer">From Amogenz</div>
+    </div>
+
+    <div class="app-glass-container">
+        
+        <div id="sidebar-overlay" onclick="toggleSidebar()"></div>
+        
+        <div id="sidebar">
+            <div class="sidebar-header">
+                <div class="user-profile">
+                    <div class="avatar-circle" id="side-avatar">?</div>
+                    <div class="user-info">
+                        <h3>Aksara Menu</h3>
+                        <span id="side-user">Guest</span>
+                    </div>
+                </div>
+                
+                <div class="stats-box">
+                    <span class="stats-label">Total Visits</span>
+                    <div id="visit-counter" class="stats-number">...</div>
+                </div>
+            </div>
+            
+            <div class="setting-group">
+                <div class="setting-block">
+                    <div class="setting-row" style="margin-bottom: 5px;">
+                         <span style="font-weight:bold; font-size:12px; color:var(--ios-gray);">APPEARANCE</span>
+                    </div>
+                    <button class="permission-btn" onclick="document.getElementById('bg-input').click()">
+                        <i class="material-icons">wallpaper</i> Ganti Wallpaper
+                    </button>
+                    <button class="reset-btn" onclick="resetBackground()">Reset Default</button>
+                    <input type="file" id="bg-input" accept="image/*" onchange="handleBackgroundUpload(this)" style="display:none;">
+                </div>
+                
+                <div style="height:1px; background:rgba(0,0,0,0.05); margin: 10px 0;"></div>
+
+                <div class="setting-row">
+                    <span><i class="material-icons icon-sm">volume_up</i> Suara Chat</span>
+                    <label class="switch">
+                        <input type="checkbox" id="sound-toggle" checked onchange="toggleSound()">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div class="setting-row">
+                    <span><i class="material-icons icon-sm">keyboard_return</i> Enter = Kirim</span>
+                    <label class="switch">
+                        <input type="checkbox" id="enter-toggle" checked onchange="toggleEnterSettings()">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                
+                <button class="permission-btn" onclick="enableNotif()">
+                    <i class="material-icons">notifications</i> Izinkan Notifikasi
+                </button>
+            </div>
+
+            <div class="online-section">
+                <h4>ONLINE (<span id="online-count">0</span>)</h4>
+                <ul id="online-list"></ul>
+            </div>
+
+            <button class="sidebar-btn logout" onclick="leaveRoom()">
+                <i class="material-icons">logout</i> Keluar
+            </button>
+        </div>
+
+        <div id="chat-screen">
+            <header>
+                <div class="header-left">
+                    <div class="icon-btn-glass" onclick="toggleSidebar()">
+                        <i class="material-icons">menu</i>
+                    </div>
+                    
+                    <div class="header-text-container">
+                        <div class="title-row">
+                            <span class="header-title-text">Aksara</span>
+                            <i class="material-icons verified-icon">verified</i>
+                        </div>
+                        <span id="room-display" class="room-status">Waiting...</span>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <div id="typing-indicator"></div> 
+                    <div class="icon-btn-glass"><i class="material-icons">search</i></div>
+                </div>
+            </header>
+            
+            <div id="messages"></div>
+
+            <div class="footer-container">
+                <div id="reply-preview-bar">
+                    <div class="reply-line"></div>
+                    <div style="flex:1; overflow:hidden;">
+                        <div style="color:var(--ios-blue); font-size:12px; font-weight:600;">Replying to <span id="reply-to-user">...</span></div>
+                        <div id="reply-preview-text" style="font-size:13px; color:#333;">...</div>
+                    </div>
+                    <div class="close-prev" onclick="cancelReply()"><i class="material-icons" style="color:#888;">close</i></div>
+                </div>
+
+                <div id="vn-preview-bar">
+                    <audio id="vn-player" controls></audio>
+                    <div class="vn-actions">
+                        <button onclick="sendVoiceNote()" class="btn-circle green"><i class="material-icons" style="font-size:16px;">check</i></button>
+                        <button onclick="cancelVoiceNote()" class="btn-circle red"><i class="material-icons" style="font-size:16px;">close</i></button>
+                    </div>
+                </div>
+
+                <div class="input-area" id="main-input-area">
+                    <button class="icon-btn" onclick="triggerImageUpload()">
+                        <i class="material-icons">add_photo_alternate</i>
+                    </button>
+
+                    <div class="input-wrapper-glass">
+                        <textarea id="msg-input" rows="1" placeholder="iMessage" onkeydown="handleEnter(event)" oninput="handleTyping()"></textarea>
+                        <button class="icon-btn-mini" id="mic-btn" onclick="toggleRecording()">
+                            <i class="material-icons">mic</i>
+                        </button>
+                    </div>
+
+                    <button id="send-btn" onclick="sendMessage()">
+                        <i class="material-icons">arrow_upward</i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div> <input type="file" id="chat-file-input" accept="image/*" onchange="handleImageUpload(this)" style="display: none !important;">
+
+    <script>
+        let client;
+        let myName = "";
+        let myRoom = "";
+        let storageTopic = ""; 
+
+        // --- COUNTER & STATS ---
+        let statsTopic = "aksara-global-v1/visits"; 
+        let hasCountedVisit = false; 
+
+        let mediaRecorder, audioChunks = [], isRecording = false, audioBlobData = null;
+        let isSoundOn = true;
+        let sendOnEnter = true;
+        let replyingTo = null; // Format: { id, user, text }
+        let onlineUsers = {};
+        let typingTimeout;
+        let localChatHistory = []; 
+
+        const notifAudio = document.getElementById('notifSound');
+
+        // --- INIT ---
+        window.onload = function() {
+            if(localStorage.getItem('aksara_name')) document.getElementById('username').value = localStorage.getItem('aksara_name');
+            if(localStorage.getItem('aksara_room')) document.getElementById('room').value = localStorage.getItem('aksara_room');
+            
+            if(localStorage.getItem('aksara_sound')) document.getElementById('sound-toggle').checked = (localStorage.getItem('aksara_sound') === 'true');
+            if(localStorage.getItem('aksara_enter')) document.getElementById('enter-toggle').checked = (localStorage.getItem('aksara_enter') === 'true');
+            const savedBg = localStorage.getItem('aksara_bg_image');
+            if(savedBg) document.body.style.backgroundImage = `url(${savedBg})`;
+        };
+
+        // --- NOTIFIKASI SYSTEM ---
+        function enableNotif() {
+            Notification.requestPermission().then(p => {
+                if (p === "granted") alert("Notifikasi Aktif!"); else alert("Ditolak browser.");
+            });
+        }
+        function sendSystemNotification(user, text) {
+            if (document.visibilityState === "hidden" && Notification.permission === "granted") {
+                const notif = new Notification(`Aksara: ${user}`, { body: text, icon: "https://i.imgur.com/Ct0pzwl.png" });
+                notif.onclick = function() { window.focus(); this.close(); };
+            }
+        }
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            if (sidebar.style.left === '0px') { sidebar.style.left = '-350px'; sidebar.classList.remove('active'); overlay.style.display = 'none'; }
+            else { sidebar.style.left = '0px'; sidebar.classList.add('active'); overlay.style.display = 'block'; }
+        }
+
+        // --- KONEKSI UTAMA ---
+        function startChat() {
+            const user = document.getElementById('username').value.trim();
+            const room = document.getElementById('room').value.trim().toLowerCase();
+            if (!user || !room) { alert("Isi data dulu!"); return; }
+
+            localStorage.setItem('aksara_name', user);
+            localStorage.setItem('aksara_room', room);
+            myName = user;
+            myRoom = "aksara-v29/" + room; 
+            storageTopic = myRoom + "/storage"; 
+
+            document.getElementById('side-user').innerText = myName;
+            document.getElementById('side-avatar').innerText = myName.charAt(0).toUpperCase(); // Update Avatar UI
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('chat-screen').style.display = 'flex';
+            document.getElementById('room-display').innerText = "#" + room;
+            document.getElementById('typing-indicator').innerText = "Menghubungkan...";
+
+            loadFromLocal(); 
+
+            const options = { 
+                protocol: 'wss', type: 'mqtt', clean: true, reconnectPeriod: 1000, 
+                clientId: 'aks_' + Math.random().toString(16).substr(2, 8) 
+            };
+            
+            client = mqtt.connect('wss://broker.emqx.io:8084/mqtt', options);
+
+            client.on('connect', () => {
+                document.getElementById('typing-indicator').innerText = "";
+                
+                client.subscribe(myRoom);
+                client.subscribe(storageTopic);
+                client.subscribe(statsTopic);
+                
+                publishMessage("bergabung.", 'system');
+                
+                setTimeout(() => {
+                    const counterEl = document.getElementById('visit-counter');
+                    if (counterEl.innerText === "...") {
+                        counterEl.innerText = "1";
+                        hasCountedVisit = true;
+                        client.publish(statsTopic, "1", { retain: true, qos: 1 });
+                    }
+                }, 3000);
+
+                setInterval(() => {
+                    client.publish(myRoom, JSON.stringify({ type: 'ping', user: myName }));
+                    cleanOnlineList();
+                }, 10000);
+            });
+
+            client.on('message', (topic, message) => {
+                const msgString = message.toString();
+                
+                if (topic === statsTopic) {
+                    let currentVisits = 0;
+                    try { currentVisits = parseInt(msgString); } catch(e) {}
+                    if (isNaN(currentVisits)) currentVisits = 0;
+
+                    if (!hasCountedVisit) {
+                        const newVisitCount = currentVisits + 1;
+                        hasCountedVisit = true; 
+                        client.publish(statsTopic, newVisitCount.toString(), { retain: true, qos: 1 });
+                        document.getElementById('visit-counter').innerText = newVisitCount.toLocaleString();
+                    } else {
+                        document.getElementById('visit-counter').innerText = currentVisits.toLocaleString();
+                    }
+                    return; 
+                }
+
+                if (topic === storageTopic) {
+                    try {
+                        const serverHistory = JSON.parse(msgString);
+                        if (Array.isArray(serverHistory)) mergeWithLocal(serverHistory);
+                    } catch(e) {}
+                    return;
+                }
+
+                if (topic === myRoom) {
+                    try {
+                        const data = JSON.parse(msgString);
+                        if (data.type === 'ping') { updateOnlineList(data.user); return; }
+                        if (data.type === 'typing') { showTyping(data.user); return; }
+                        handleIncomingMessage(data);
+                    } catch (e) {}
+                }
+            });
+        }
+
+        // --- LOGIKA PENYIMPANAN ---
+        function loadFromLocal() {
+            const saved = localStorage.getItem(getStorageKey());
+            if (saved) { localChatHistory = JSON.parse(saved); renderChat(); }
+        }
+        function saveToLocal() {
+            localStorage.setItem(getStorageKey(), JSON.stringify(localChatHistory));
+        }
+        function handleIncomingMessage(data) {
+            if(data.type !== 'system') {
+                const exists = localChatHistory.some(msg => msg.id === data.id);
+                if (!exists) {
+                    localChatHistory.push(data);
+                    if (localChatHistory.length > 77) localChatHistory = localChatHistory.slice(-77); 
+                    saveToLocal(); renderChat(); 
+                    if (data.user === myName) updateServerStorage();
+                }
+            } else { displaySingleMessage(data); }
+        }
+        function mergeWithLocal(serverData) {
+            let isChanged = false;
+            serverData.forEach(srvMsg => {
+                const exists = localChatHistory.some(locMsg => locMsg.id === srvMsg.id);
+                if (!exists) { localChatHistory.push(srvMsg); isChanged = true; }
+            });
+            if (isChanged) {
+                localChatHistory.sort((a, b) => a.timestamp - b.timestamp);
+                if (localChatHistory.length > 77) localChatHistory = localChatHistory.slice(-77);
+                saveToLocal(); renderChat();
+            }
+        }
+        function updateServerStorage() {
+            client.publish(storageTopic, JSON.stringify(localChatHistory), { retain: true, qos: 1 });
+        }
+        function renderChat() {
+            const chatBox = document.getElementById('messages');
+            chatBox.innerHTML = '<div class="welcome-msg">Messages are encrypted and secure.</div>';
+            localChatHistory.forEach(msg => displaySingleMessage(msg));
+            setTimeout(() => { chatBox.scrollTop = chatBox.scrollHeight; }, 50);
+        }
+
+        // --- HELPER ---
+        function getStorageKey() { return 'aksara_history_v29_' + myRoom; }
+        function handleBackgroundUpload(input) {
+            const file = input.files[0];
+            if(file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try { localStorage.setItem('aksara_bg_image', e.target.result); document.body.style.backgroundImage = `url(${e.target.result})`; alert("Background diganti!"); } catch(e){alert("Gambar kebesaran!");}
+                }
+                reader.readAsDataURL(file);
+            }
+        }
+        function resetBackground() { localStorage.removeItem('aksara_bg_image'); document.body.style.backgroundImage = ""; alert("Background dihapus."); }
+        function clearChatHistory() { localStorage.removeItem(getStorageKey()); }
+        function toggleSound() { isSoundOn = document.getElementById('sound-toggle').checked; localStorage.setItem('aksara_sound', isSoundOn); }
+        function toggleEnterSettings() { sendOnEnter = document.getElementById('enter-toggle').checked; localStorage.setItem('aksara_enter', sendOnEnter); }
+        function updateOnlineList(user) { onlineUsers[user] = Date.now(); renderOnlineList(); }
+        function cleanOnlineList() { const now = Date.now(); for (const user in onlineUsers) { if (now - onlineUsers[user] > 25000) delete onlineUsers[user]; } renderOnlineList(); }
+        function renderOnlineList() {
+            const list = document.getElementById('online-list');
+            list.innerHTML = ""; let total = 0;
+            for (const user in onlineUsers) {
+                total++; const li = document.createElement('li');
+                li.innerHTML = `<span style="color:var(--ios-green)">●</span> ${user}`;
+                list.appendChild(li);
+            }
+            document.getElementById('online-count').innerText = total;
+        }
+
+        // --- SEND MESSAGE ---
+        function publishMessage(content, type = 'text', caption = '') {
+            if (!content) return;
+            const now = new Date();
+            const time = now.getHours().toString().padStart(2,'0') + ":" + now.getMinutes().toString().padStart(2,'0');
+            const msgId = 'msg-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+
+            const payload = { 
+                id: msgId,
+                user: myName, content: content, type: type, 
+                caption: caption, time: time, reply: replyingTo, timestamp: Date.now() 
+            };
+            
+            try { client.publish(myRoom, JSON.stringify(payload)); } catch(e) { alert("Koneksi error, coba lagi!"); }
+            cancelReply();
+        }
+        function sendMessage() {
+            const input = document.getElementById('msg-input'); const text = input.value.trim();
+            if (text) { publishMessage(text, 'text'); input.value = ''; input.style.height = 'auto'; input.focus(); }
+        }
+        function handleEnter(e) { if (e.key === 'Enter' && !e.shiftKey && sendOnEnter) { e.preventDefault(); sendMessage(); } }
+
+        // --- REPLY LOGIC ---
+        function setReply(id, user, text) { 
+            replyingTo = { id: id, user: user, text: text }; 
+            document.getElementById('reply-preview-bar').style.display = 'flex'; 
+            document.getElementById('reply-to-user').innerText = user; 
+            let preview = text;
+            if(preview.length > 50) preview = preview.substring(0, 50) + "...";
+            document.getElementById('reply-preview-text').innerText = preview; 
+            document.getElementById('msg-input').focus(); 
+        }
+        function cancelReply() { replyingTo = null; document.getElementById('reply-preview-bar').style.display = 'none'; }
+
+        function scrollToMessage(msgId) {
+            const el = document.getElementById(msgId);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el.classList.add('flash-highlight');
+                setTimeout(() => el.classList.remove('flash-highlight'), 1000);
+            } else {
+                alert("Pesan asli sudah tidak ada (terhapus/terlalu lama).");
+            }
+        }
+
+        // --- MEDIA LOGIC ---
+        async function toggleRecording() {
+            const micBtn = document.getElementById('mic-btn');
+            if (!isRecording) {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(stream); audioChunks = [];
+                    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                    mediaRecorder.onstop = () => {
+                        audioBlobData = new Blob(audioChunks, { type: 'audio/webm' });
+                        document.getElementById('vn-player').src = URL.createObjectURL(audioBlobData);
+                        document.getElementById('vn-preview-bar').style.display = 'flex';
+                        document.getElementById('main-input-area').style.display = 'none';
+                    };
+                    mediaRecorder.start(); isRecording = true; micBtn.classList.add('recording');
+                } catch (err) { alert("Butuh izin mic!"); }
+            } else { mediaRecorder.stop(); isRecording = false; micBtn.classList.remove('recording'); }
+        }
+        function sendVoiceNote() { const reader = new FileReader(); reader.readAsDataURL(audioBlobData); reader.onloadend = () => { publishMessage(reader.result, 'audio'); cancelVoiceNote(); }; }
+        function cancelVoiceNote() { audioBlobData = null; document.getElementById('vn-preview-bar').style.display = 'none'; document.getElementById('main-input-area').style.display = 'flex'; }
+        function handleImageUpload(input) {
+            const file = input.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    tempImageBase64 = e.target.result;
+                    document.getElementById('preview-img').src = tempImageBase64;
+                    document.getElementById('image-preview-modal').style.display = 'flex';
+                }
+                reader.readAsDataURL(file);
+            }
+            input.value = ""; 
+        }
+        function triggerImageUpload() { document.getElementById('chat-file-input').click(); }
+        function cancelImagePreview() {
+            document.getElementById('image-preview-modal').style.display = 'none';
+            document.getElementById('img-caption').value = "";
+            tempImageBase64 = null;
+        }
+        function sendImageWithCaption() {
+            if (!tempImageBase64) return;
+            const caption = document.getElementById('img-caption').value.trim();
+            const img = new Image(); img.src = tempImageBase64;
+            img.onload = function() {
+                const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
+                const scale = 300 / img.width; canvas.width = 300; canvas.height = img.height * scale;
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6);
+                publishMessage(compressedBase64, 'image', caption);
+                cancelImagePreview();
+            }
+        }
+        function handleTyping() { if(client && client.connected) client.publish(myRoom, JSON.stringify({ type: 'typing', user: myName })); const el = document.getElementById('msg-input'); el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; }
+        function showTyping(user) {
+            if (user === myName) return;
+            const ind = document.getElementById('typing-indicator');
+            ind.innerText = `${user} typing...`;
+            clearTimeout(typingTimeout);
+            typingTimeout = setTimeout(() => { ind.innerText = ""; }, 2000);
+        }
+
+        // --- DISPLAY LOGIC ---
+        function displaySingleMessage(data) {
+            const chatBox = document.getElementById('messages');
+            const div = document.createElement('div');
+            const isMe = data.user === myName;
+            
+            if (data.id) div.id = data.id;
+
+            const isNew = (Date.now() - data.timestamp) < 3000; 
+            if (isNew && !isMe && data.type !== 'system') {
+                if (isSoundOn) { notifAudio.currentTime = 0; notifAudio.play().catch(() => {}); }
+                sendSystemNotification(data.user, data.type === 'text' ? data.content : 'Mengirim media');
+            }
+
+            if (data.type === 'system') {
+                div.style.textAlign = 'center'; div.style.fontSize = '11px'; 
+                div.style.color = '#fff'; div.style.opacity = '0.7'; div.style.margin = "10px 0";
+                div.innerText = `${data.user} ${data.content}`;
+            } else {
+                div.className = isMe ? 'message right' : 'message left';
+                let contentHtml = "";
+                let replyPreviewText = "Media";
+
+                if (data.type === 'text') { 
+                    contentHtml = `<span class="msg-content">${data.content}</span>`; 
+                    replyPreviewText = data.content;
+                }
+                else if (data.type === 'image') {
+                    contentHtml = `<img src="${data.content}" class="chat-image">`;
+                    if(data.caption) contentHtml += `<div style="font-size:14px; margin-top:5px;">${data.caption}</div>`;
+                    replyPreviewText = "📷 Image";
+                }
+                else if (data.type === 'audio') { 
+                    contentHtml = `<audio controls src="${data.content}"></audio>`; 
+                    replyPreviewText = "🎤 Audio";
+                }
+
+                let replyHtml = "";
+                if(data.reply) {
+                    let shortText = data.reply.text;
+                    if(shortText.length > 40) shortText = shortText.substring(0, 40) + "...";
+                    
+                    replyHtml = `
+                        <div class="reply-quote" onclick="scrollToMessage('${data.reply.id}')">
+                            <div class="reply-content">
+                                <b>${data.reply.user}</b>
+                                <span>${shortText}</span>
+                            </div>
+                        </div>`;
+                }
+                
+                const safeText = replyPreviewText.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                const msgId = data.id || 'unknown';
+                const replyBtn = !isMe ? `<i class="material-icons reply-btn" onclick="setReply('${msgId}', '${data.user}', '${safeText}')">reply</i>` : '';
+
+                div.innerHTML = `
+                    <span class="sender-name">${data.user}</span>
+                    ${replyHtml}
+                    <div>${contentHtml}</div>
+                    <div class="time-info">${data.time} ${replyBtn}</div>
+                `;
+            }
+            chatBox.appendChild(div);
+        }
+
+        function leaveRoom() {
+            if(confirm("Keluar dari chat?")) {
+                if(client && client.connected) publishMessage("telah keluar.", 'system');
+                clearChatHistory();
+                localStorage.removeItem('aksara_name');
+                localStorage.removeItem('aksara_room');
+                location.reload();
+            }
+        }
+    </script>
+</body>
+</html>
