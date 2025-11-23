@@ -2,6 +2,7 @@ let client;
 let myName = "";
 let myRoom = "";
 let storageTopic = ""; 
+// TOPIC KHUSUS BROADCAST ADMIN (GLOBAL)
 const broadcastTopic = "aksara-global-v1/announcements";
 
 const notifAudio = document.getElementById('notifSound');
@@ -18,7 +19,7 @@ let onlineUsers = {};
 let typingTimeout;
 let localChatHistory = []; 
 
-// --- KEAMANAN: FUNGSI CEK PASSWORD ---
+// --- FUNGSI HASHING (KEAMANAN) ---
 async function digestMessage(message) {
     const msgBuffer = new TextEncoder().encode(message);
     const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
@@ -89,24 +90,28 @@ function startChat() {
     client.on('message', (topic, message) => {
         const msgString = message.toString();
         
-        // --- LOGIKA TERIMA BROADCAST ADMIN ---
+        // --- LOGIKA PENERIMA BROADCAST (YANG DIPERBAIKI) ---
         if (topic === broadcastTopic) {
             try {
                 const data = JSON.parse(msgString);
                 
-                // JIKA PERINTAHNYA ADALAH 'CLEAR' (HAPUS)
+                // 1. HAPUS PESAN ADMIN LAMA (Agar tidak numpuk)
+                const existingAdmin = document.querySelectorAll('.message.admin');
+                existingAdmin.forEach(el => el.remove());
+
+                // 2. JIKA TIPE 'admin_clear', BERHENTI DISINI (JANGAN TAMPILKAN APAPUN)
                 if (data.type === 'admin_clear') {
-                    // Cari elemen pesan admin di layar dan hapus
-                    const existingAdminMsg = document.querySelectorAll('.message.admin');
-                    existingAdminMsg.forEach(el => el.remove());
-                    return;
+                    return; 
                 }
 
-                // JIKA PESAN BARU
-                displaySingleMessage(data); 
+                // 3. JIKA PESAN BARU, TAMPILKAN
+                if (data.type === 'admin') {
+                    displaySingleMessage(data);
+                }
             } catch(e) {}
             return;
         }
+        // ---------------------------------------------------
 
         if (topic === storageTopic) { try { const srv = JSON.parse(msgString); if (Array.isArray(srv)) mergeWithLocal(srv); } catch(e) {} return; }
         if (topic === myRoom) { try { const data = JSON.parse(msgString); if (data.type === 'ping') { updateOnlineList(data.user); return; } if (data.type === 'typing') { showTyping(data.user); return; } handleIncomingMessage(data); } catch(e) {} }
@@ -116,6 +121,7 @@ function startChat() {
 function loadFromLocal() { const saved = localStorage.getItem(getStorageKey()); if (saved) { localChatHistory = JSON.parse(saved); renderChat(); } }
 function saveToLocal() { localStorage.setItem(getStorageKey(), JSON.stringify(localChatHistory)); }
 function handleIncomingMessage(data) {
+    // Jangan simpan pesan admin/system di history lokal user
     if(data.type !== 'system' && data.type !== 'admin' && data.type !== 'admin_clear') {
         if (!localChatHistory.some(msg => msg.id === data.id)) {
             localChatHistory.push(data);
@@ -158,8 +164,10 @@ function publishMessage(content, type = 'text', caption = '') {
     const msgId = 'msg-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
     const payload = { id: msgId, user: myName, content: content, type: type, caption: caption, time: time, reply: replyingTo, timestamp: Date.now() };
     
+    // Tentukan Target Jalur
     const topicTarget = (type === 'admin' || type === 'admin_clear') ? broadcastTopic : myRoom;
-    // Retain hanya untuk admin (agar pesan nempel atau terhapus permanen)
+    
+    // Retain: True untuk Admin, False untuk chat biasa
     const mqttOpts = (type === 'admin' || type === 'admin_clear') ? { retain: true, qos: 1 } : {};
 
     try { 
@@ -172,22 +180,23 @@ function publishMessage(content, type = 'text', caption = '') {
     if (type !== 'admin' && type !== 'admin_clear') cancelReply();
 }
 
-// --- MODIFIKASI SEND MESSAGE (ADMIN COMMANDS) ---
+// --- SEND MESSAGE HANDLER ---
 async function sendMessage() {
     const input = document.getElementById('msg-input');
     const text = input.value.trim();
     
     if (!text) return;
 
-    // 1. DETEKSI: KIRIM PESAN ADMIN
-    if (text.startsWith('/admin')) {
+    // 1. PERINTAH KIRIM PESAN ADMIN (/admin [pass] [pesan])
+    if (text.startsWith('/admin ')) {
         const parts = text.split(' ');
+        if (parts.length < 3) return; // Cek format minimal
         const pass = parts[1];
         const messageContent = parts.slice(2).join(' ');
         const hashedInput = await digestMessage(pass);
 
-        if (hashedInput === ADMIN_HASH && messageContent) {
-            publishMessage(messageContent, 'admin'); // Kirim Pesan
+        if (hashedInput === ADMIN_HASH) {
+            publishMessage(messageContent, 'admin');
             showToast("Broadcast Admin Terkirim!", "success");
         } else {
             showToast("Akses Ditolak: Password Salah!", "error");
@@ -196,24 +205,24 @@ async function sendMessage() {
         return;
     }
 
-    // 2. DETEKSI: HAPUS PESAN ADMIN (BARU)
-    if (text.startsWith('/hapusadmin')) {
+    // 2. PERINTAH HAPUS PESAN ADMIN (/hapusadmin [pass])
+    if (text.startsWith('/hapusadmin ')) {
         const parts = text.split(' ');
-        const pass = parts[1]; // Ambil password
+        if (parts.length < 2) return;
+        const pass = parts[1];
         const hashedInput = await digestMessage(pass);
 
         if (hashedInput === ADMIN_HASH) {
-            // Kirim sinyal 'admin_clear' ke server (Retained juga, untuk menimpa pesan lama)
-            publishMessage('clear', 'admin_clear'); 
+            // Kirim sinyal 'admin_clear'
+            publishMessage('clear', 'admin_clear');
             showToast("Pesan Admin Dihapus!", "success");
         } else {
-            showToast("Gagal: Password Salah!", "error");
+            showToast("Akses Ditolak: Password Salah!", "error");
         }
         input.value = ''; input.style.height = 'auto'; input.focus();
         return;
     }
 
-    // 3. KIRIM PESAN BIASA
     publishMessage(text, 'text'); 
     input.value = ''; input.style.height = 'auto'; input.focus();
 }
@@ -248,6 +257,7 @@ function sendImageWithCaption() {
 function handleTyping() { if(client && client.connected) client.publish(myRoom, JSON.stringify({ type: 'typing', user: myName })); const el = document.getElementById('msg-input'); el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; }
 function showTyping(user) { if (user === myName) return; const ind = document.getElementById('typing-indicator'); ind.innerText = `${user} typing...`; clearTimeout(typingTimeout); typingTimeout = setTimeout(() => { ind.innerText = ""; }, 2000); }
 
+// --- LIGHTBOX FUNCTIONS ---
 function openLightbox(src) { document.getElementById('lightbox-img').src = src; document.getElementById('lightbox-overlay').style.display = 'flex'; }
 function closeLightbox(e) { if (e.target.classList.contains('lightbox-close') || e.target.id === 'lightbox-overlay') { document.getElementById('lightbox-overlay').style.display = 'none'; } }
 
@@ -261,10 +271,6 @@ function displaySingleMessage(data) {
         div.innerText=`${data.user} ${data.content}`; 
     } 
     else if (data.type === 'admin') {
-        // HAPUS pesan admin lama jika ada sebelum menampilkan yang baru (biar tidak numpuk)
-        const existingAdmin = document.querySelectorAll('.message.admin');
-        existingAdmin.forEach(el => el.remove());
-
         div.className = 'message admin';
         div.innerHTML = `<div class="admin-badge">AKSARA <i class="material-icons" style="font-size:16px; color:#FFD700; margin-left:4px;">verified</i></div><div class="admin-content">${data.content.replace(/\n/g,'<br>')}</div><div class="admin-time">${data.time}</div>`;
     }
@@ -280,7 +286,6 @@ function displaySingleMessage(data) {
 
         div.innerHTML = `<span class="sender-name">${data.user}</span>${replyHtml}<div>${contentHtml}</div><div class="time-info">${data.time} ${replyBtn}</div>`;
     }
-    
     chatBox.appendChild(div);
     const isAtBottom = (chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight) < 150;
     if (isAtBottom || isMe || data.type === 'admin') chatBox.scrollTop = chatBox.scrollHeight;
