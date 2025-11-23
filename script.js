@@ -1,7 +1,4 @@
-/**
- * AKSARA CHAT SYSTEM - SECURE & FIXED
- * Security: HASH ONLY (No Plain Text Fallback)
- */
+/* AKSARA CHAT SYSTEM */
 
 let client;
 let myName = "";
@@ -9,10 +6,7 @@ let myRoom = "";
 let storageTopic = ""; 
 const broadcastTopic = "aksara-global-v1/announcements";
 
-// --- KEAMANAN: HANYA HASH ---
-// Hash SHA-256 dari "*". 
-// Tidak ada teks asli password di kode ini.
-const ADMIN_HASH = "83878c91171338902e0fe0fb97a8c47a828505289d1b8e9def57d66bd3451655";
+const ADMIN_HASH_KEY = "1120"; 
 
 // State Variables
 let isAdminMode = false; 
@@ -29,14 +23,12 @@ let localChatHistory = [];
 const notifAudio = document.getElementById('notifSound');
 const sentAudio = document.getElementById('sentSound');
 
-
-// --- 1. HELPER FUNCTIONS ---
-
-async function digestMessage(message) {
-    const msgBuffer = new TextEncoder().encode(message);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+function customHash(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        hash += str.charCodeAt(i) * (i + 1);
+    }
+    return (hash * 10).toString();
 }
 
 function showToast(message, type = 'info') {
@@ -129,26 +121,12 @@ function startChat() {
 
     loadFromLocal(); 
 
-    const clientId = 'aks_' + Math.random().toString(16).substr(2, 8);
-    const host = 'wss://broker.emqx.io:8084/mqtt';
-
-    const options = {
-        keepalive: 60,
-        clientId: clientId,
-        protocolId: 'MQTT',
-        protocolVersion: 4,
-        clean: true,
-        reconnectPeriod: 1000,
-        connectTimeout: 30 * 1000,
-        will: { topic: myRoom, payload: 'Connection Closed', qos: 0, retain: false },
+    const options = { 
+        protocol: 'wss', type: 'mqtt', clean: true, 
+        reconnectPeriod: 1000, 
+        clientId: 'aks_' + Math.random().toString(16).substr(2, 8) 
     };
-
-    try {
-        client = mqtt.connect(host, options);
-    } catch (err) {
-        showToast("Gagal inisialisasi MQTT", "error");
-        return;
-    }
+    client = mqtt.connect('wss://broker.emqx.io:8084/mqtt', options);
 
     client.on('connect', () => {
         document.getElementById('typing-indicator').innerText = "";
@@ -159,21 +137,20 @@ function startChat() {
         publishMessage("bergabung.", 'system');
         
         setInterval(() => { 
-            if(client.connected) {
-                client.publish(myRoom, JSON.stringify({ type: 'ping', user: myName })); 
-                cleanOnlineList(); 
-            }
+            client.publish(myRoom, JSON.stringify({ type: 'ping', user: myName })); 
+            cleanOnlineList(); 
         }, 10000);
     });
 
     client.on('message', (topic, message) => {
         const msgString = message.toString();
         
-        // ADMIN BROADCAST
+        
         if (topic === broadcastTopic) {
             try {
                 const data = JSON.parse(msgString);
                 if (data.type === 'admin_clear') {
+                
                     localChatHistory = localChatHistory.filter(msg => !msg.isAdmin && msg.type !== 'admin');
                     saveToLocal(); 
                     renderChat();
@@ -202,6 +179,8 @@ function handleIncomingMessage(data) {
             if (localChatHistory.length > 77) localChatHistory = localChatHistory.slice(-77); 
             
             saveToLocal(); 
+            
+            // LOGIKA SCROLL
             
             const isMe = (data.user === myName);
             const isAdm = (data.isAdmin || data.type === 'admin');
@@ -257,7 +236,7 @@ function createMessageElement(data) {
     div.className = isMe ? 'message right' : 'message left';
     let contentHtml = "";
     if (data.type === 'text') contentHtml = `<span class="msg-content">${data.content}</span>`;
-    else if (data.type === 'image') contentHtml = `<img src="${data.content}" class="chat-image" onclick="openLightbox(this.src)">` + (data.caption ? `<div style="font-size:12px;margin-top:5px">${data.caption}</div>` : '');
+    else if (data.type === 'image') contentHtml = `<img src="${data.content}" class="chat-image" onclick="openLightbox(this.src)" style="max-height:200px; width:auto;">` + (data.caption ? `<div style="font-size:12px;margin-top:5px">${data.caption}</div>` : '');
     else if (data.type === 'audio') contentHtml = `<audio controls src="${data.content}"></audio>`;
 
     let replyHtml = "";
@@ -307,44 +286,45 @@ function publishMessage(content, type = 'text', caption = '') {
         isAdmin: isAdminMode 
     };
 
-    if (client && client.connected) {
-        try { 
-            client.publish(finalTopic, JSON.stringify(payload), mqttOpts); 
-            if (isSoundOn && !isAdminMode && type !== 'system') playSound('sent');
-        } catch(e) { showToast("Gagal kirim", "error"); }
-    } else {
-        showToast("Belum terkoneksi!", "error");
-    }
+    try { 
+        client.publish(finalTopic, JSON.stringify(payload), mqttOpts); 
+        if (isSoundOn && !isAdminMode && type !== 'system') playSound('sent');
+    } catch(e) { showToast("Gagal kirim", "error"); }
     
     if (!isAdminMode) cancelReply();
 }
 
-async function sendMessage() {
+// --- FUNGSI UTAMA SEND
+
+function sendMessage() {
     const input = document.getElementById('msg-input');
     const text = input.value.trim();
     if (!text) return;
 
+
     if (text.startsWith('/admin ')) {
         const pass = text.split(' ')[1];
-        try {
-            const hashed = await digestMessage(pass);
-            if (hashed === ADMIN_HASH) toggleAdminMode(true);
-            else showToast("Password Salah!", "error");
-        } catch(e) { 
-            showToast("Admin hanya jalan di HTTPS/Online!", "error");
+        if (customHash(pass) === ADMIN_HASH_KEY) {
+            toggleAdminMode(true);
+        } else {
+            showToast("Password Salah!", "error");
         }
         input.value = ''; input.style.height = 'auto'; input.focus(); return;
     }
 
+    // LOGOUT
+    
     if (text === '/exit') { toggleAdminMode(false); input.value = ''; input.style.height = 'auto'; input.focus(); return; }
+    
     
     if (text.startsWith('/hapusadmin')) {
         const pass = text.split(' ')[1];
-        try {
-            const hashed = await digestMessage(pass);
-            if (hashed === ADMIN_HASH) { publishMessage('clear', 'admin_clear'); showToast("Dihapus", "success"); }
-            else showToast("Password Salah", "error");
-        } catch(e) { showToast("Admin hanya jalan di HTTPS/Online!", "error"); }
+        if (customHash(pass) === ADMIN_HASH_KEY) {
+            publishMessage('clear', 'admin_clear');
+            showToast("Dihapus", "success");
+        } else {
+            showToast("Password Salah!", "error");
+        }
         input.value = ''; return;
     }
 
@@ -353,7 +333,7 @@ async function sendMessage() {
 }
 
 
-// --- 6. UTILS & HANDLERS ---
+// --- 6. UTILS ---
 
 function handleEnter(e) { if (e.key === 'Enter' && !e.shiftKey && sendOnEnter) { e.preventDefault(); sendMessage(); } }
 function handleTyping() { if(client&&client.connected) client.publish(myRoom, JSON.stringify({type:'typing', user:myName})); const el=document.getElementById('msg-input'); el.style.height='auto'; el.style.height=el.scrollHeight+'px'; }
@@ -362,6 +342,7 @@ function updateOnlineList(user) { onlineUsers[user]=Date.now(); renderOnlineList
 function cleanOnlineList() { const now=Date.now(); for(const u in onlineUsers)if(now-onlineUsers[u]>20000)delete onlineUsers[u]; renderOnlineList(); }
 function renderOnlineList() { const l=document.getElementById('online-list'); l.innerHTML=""; for(const u in onlineUsers){ const li=document.createElement('li'); li.innerHTML=`<span style="color:var(--ios-green)">●</span> ${u}`; l.appendChild(li); } }
 
+function toggleSidebar() { const sb=document.getElementById('sidebar'); const ov=document.getElementById('sidebar-overlay'); if(sb.style.left==='0px'){sb.style.left='-350px';sb.classList.remove('active');ov.style.display='none';}else{sb.style.left='0px';sb.classList.add('active');ov.style.display='block';} }
 function handleBackgroundUpload(input) { const f=input.files[0]; if(f){ const r=new FileReader(); r.onload=e=>{try{localStorage.setItem('aksara_bg_image',e.target.result); document.body.style.backgroundImage=`url(${e.target.result})`; showToast("Background diganti","success");}catch(e){showToast("Gambar kebesaran","error");}}; r.readAsDataURL(f); } }
 function resetBackground() { localStorage.removeItem('aksara_bg_image'); document.body.style.backgroundImage=""; showToast("Background reset","info"); }
 function toggleSound() { isSoundOn=document.getElementById('sound-toggle').checked; localStorage.setItem('aksara_sound',isSoundOn); }
@@ -374,7 +355,8 @@ function getStorageKey() { return 'aksara_history_v29_' + myRoom; }
 function updateServerStorage() { client.publish(storageTopic, JSON.stringify(localChatHistory), { retain: true, qos: 1 }); }
 function mergeWithLocal(serverData) { let changed = false; serverData.forEach(srvMsg => { if (!localChatHistory.some(locMsg => locMsg.id === srvMsg.id)) { localChatHistory.push(srvMsg); changed = true; } }); if (changed) { localChatHistory.sort((a, b) => a.timestamp - b.timestamp); if (localChatHistory.length > 77) localChatHistory = localChatHistory.slice(-77); saveToLocal(); renderChat(); } }
 
-// MEDIA (OnClick)
+// MEDIA HANDLERS
+
 function triggerImageUpload() { document.getElementById('chat-file-input').click(); }
 function handleImageUpload(input) { 
     const f = input.files[0]; 
@@ -406,4 +388,3 @@ async function toggleRecording() {
     } else { mediaRecorder.stop(); isRecording = false; document.getElementById('mic-btn').classList.remove('recording'); }
 }
 function leaveRoom() { if(confirm("Keluar?")) { publishMessage("telah keluar.", 'system'); localStorage.removeItem('aksara_name'); localStorage.removeItem('aksara_room'); location.reload(); } }
-function toggleSidebar() { const sb=document.getElementById('sidebar'); const ov=document.getElementById('sidebar-overlay'); if(sb.style.left==='0px'){sb.style.left='-350px';sb.classList.remove('active');ov.style.display='none';}else{sb.style.left='0px';sb.classList.add('active');ov.style.display='block';} }
