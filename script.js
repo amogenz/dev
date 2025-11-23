@@ -2,14 +2,15 @@ let client;
 let myName = "";
 let myRoom = "";
 let storageTopic = ""; 
-// TOPIC KHUSUS BROADCAST ADMIN (GLOBAL)
 const broadcastTopic = "aksara-global-v1/announcements";
 
 const notifAudio = document.getElementById('notifSound');
 const sentAudio = document.getElementById('sentSound');
 
-// --- PASSWORD ADMIN (Hash SHA-256 dari 'amogenz123') ---
-const ADMIN_HASH = "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4";
+// --- PASSWORD ADMIN (VERSI STABIL) ---
+// Kita pakai teks biasa dulu agar 100% jalan di semua browser/HP.
+// Ganti "amogenz123" dengan password rahasia pilihanmu.
+const ADMIN_PASS = "amogenz123"; 
 
 let mediaRecorder, audioChunks = [], isRecording = false, audioBlobData = null;
 let isSoundOn = true;
@@ -18,14 +19,6 @@ let replyingTo = null;
 let onlineUsers = {};
 let typingTimeout;
 let localChatHistory = []; 
-
-// --- FUNGSI HASHING (KEAMANAN) ---
-async function digestMessage(message) {
-    const msgBuffer = new TextEncoder().encode(message);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
 
 // --- TOAST FUNCTION ---
 function showToast(message, type = 'info') {
@@ -90,28 +83,23 @@ function startChat() {
     client.on('message', (topic, message) => {
         const msgString = message.toString();
         
-        // --- LOGIKA PENERIMA BROADCAST (YANG DIPERBAIKI) ---
+        // --- LOGIKA PENERIMA BROADCAST (ADMIN) ---
         if (topic === broadcastTopic) {
             try {
                 const data = JSON.parse(msgString);
                 
-                // 1. HAPUS PESAN ADMIN LAMA (Agar tidak numpuk)
+                // Hapus pesan admin lama biar tidak numpuk
                 const existingAdmin = document.querySelectorAll('.message.admin');
                 existingAdmin.forEach(el => el.remove());
 
-                // 2. JIKA TIPE 'admin_clear', BERHENTI DISINI (JANGAN TAMPILKAN APAPUN)
-                if (data.type === 'admin_clear') {
-                    return; 
-                }
+                // Jika perintah hapus, berhenti di sini (layar jadi bersih)
+                if (data.type === 'admin_clear') return; 
 
-                // 3. JIKA PESAN BARU, TAMPILKAN
-                if (data.type === 'admin') {
-                    displaySingleMessage(data);
-                }
+                // Jika pesan baru, tampilkan
+                if (data.type === 'admin') displaySingleMessage(data);
             } catch(e) {}
             return;
         }
-        // ---------------------------------------------------
 
         if (topic === storageTopic) { try { const srv = JSON.parse(msgString); if (Array.isArray(srv)) mergeWithLocal(srv); } catch(e) {} return; }
         if (topic === myRoom) { try { const data = JSON.parse(msgString); if (data.type === 'ping') { updateOnlineList(data.user); return; } if (data.type === 'typing') { showTyping(data.user); return; } handleIncomingMessage(data); } catch(e) {} }
@@ -121,7 +109,6 @@ function startChat() {
 function loadFromLocal() { const saved = localStorage.getItem(getStorageKey()); if (saved) { localChatHistory = JSON.parse(saved); renderChat(); } }
 function saveToLocal() { localStorage.setItem(getStorageKey(), JSON.stringify(localChatHistory)); }
 function handleIncomingMessage(data) {
-    // Jangan simpan pesan admin/system di history lokal user
     if(data.type !== 'system' && data.type !== 'admin' && data.type !== 'admin_clear') {
         if (!localChatHistory.some(msg => msg.id === data.id)) {
             localChatHistory.push(data);
@@ -164,10 +151,7 @@ function publishMessage(content, type = 'text', caption = '') {
     const msgId = 'msg-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
     const payload = { id: msgId, user: myName, content: content, type: type, caption: caption, time: time, reply: replyingTo, timestamp: Date.now() };
     
-    // Tentukan Target Jalur
     const topicTarget = (type === 'admin' || type === 'admin_clear') ? broadcastTopic : myRoom;
-    
-    // Retain: True untuk Admin, False untuk chat biasa
     const mqttOpts = (type === 'admin' || type === 'admin_clear') ? { retain: true, qos: 1 } : {};
 
     try { 
@@ -180,49 +164,57 @@ function publishMessage(content, type = 'text', caption = '') {
     if (type !== 'admin' && type !== 'admin_clear') cancelReply();
 }
 
-// --- SEND MESSAGE HANDLER ---
-async function sendMessage() {
+// --- FUNGSI SEND MESSAGE (PERBAIKAN LOGIKA ADMIN) ---
+function sendMessage() {
     const input = document.getElementById('msg-input');
     const text = input.value.trim();
     
     if (!text) return;
 
-    // 1. PERINTAH KIRIM PESAN ADMIN (/admin [pass] [pesan])
-    if (text.startsWith('/admin ')) {
-        const parts = text.split(' ');
-        if (parts.length < 3) return; // Cek format minimal
-        const pass = parts[1];
-        const messageContent = parts.slice(2).join(' ');
-        const hashedInput = await digestMessage(pass);
+    // 1. CEK PERINTAH ADMIN (/admin)
+    if (text.startsWith('/admin')) {
+        // Regex Pintar: Memisahkan "/admin", "password", dan "pesan" (meskipun pesannya panjang)
+        const match = text.match(/^\/admin\s+(\S+)\s+(.+)/);
+        
+        if (match) {
+            const pass = match[1]; // Password yang diketik
+            const messageContent = match[2]; // Isi Pesan
 
-        if (hashedInput === ADMIN_HASH) {
-            publishMessage(messageContent, 'admin');
-            showToast("Broadcast Admin Terkirim!", "success");
+            if (pass === ADMIN_PASS) {
+                publishMessage(messageContent, 'admin');
+                showToast("Pesan Admin Terkirim!", "success");
+            } else {
+                showToast("Password Admin Salah!", "error");
+            }
         } else {
-            showToast("Akses Ditolak: Password Salah!", "error");
+            showToast("Format Salah! Ketik: /admin [sandi] [pesan]", "error");
         }
+        
+        input.value = ''; input.style.height = 'auto'; input.focus();
+        return; // Berhenti, jangan kirim sebagai chat biasa
+    }
+
+    // 2. CEK PERINTAH HAPUS ADMIN (/hapusadmin)
+    if (text.startsWith('/hapusadmin')) {
+        const match = text.match(/^\/hapusadmin\s+(\S+)/);
+        
+        if (match) {
+            const pass = match[1];
+            if (pass === ADMIN_PASS) {
+                publishMessage('clear', 'admin_clear');
+                showToast("Pesan Admin Dihapus!", "success");
+            } else {
+                showToast("Password Admin Salah!", "error");
+            }
+        } else {
+            showToast("Format Salah! Ketik: /hapusadmin [sandi]", "error");
+        }
+
         input.value = ''; input.style.height = 'auto'; input.focus();
         return;
     }
 
-    // 2. PERINTAH HAPUS PESAN ADMIN (/hapusadmin [pass])
-    if (text.startsWith('/hapusadmin ')) {
-        const parts = text.split(' ');
-        if (parts.length < 2) return;
-        const pass = parts[1];
-        const hashedInput = await digestMessage(pass);
-
-        if (hashedInput === ADMIN_HASH) {
-            // Kirim sinyal 'admin_clear'
-            publishMessage('clear', 'admin_clear');
-            showToast("Pesan Admin Dihapus!", "success");
-        } else {
-            showToast("Akses Ditolak: Password Salah!", "error");
-        }
-        input.value = ''; input.style.height = 'auto'; input.focus();
-        return;
-    }
-
+    // 3. KIRIM PESAN BIASA
     publishMessage(text, 'text'); 
     input.value = ''; input.style.height = 'auto'; input.focus();
 }
