@@ -1,39 +1,36 @@
 /**
- * AKSARA CHAT SYSTEM - ROBUST VERSION
- * Fixes: Global Scope for OnClick, Syntax Errors, Admin Logic
+ * AKSARA CHAT SYSTEM - SECURE & FIXED
+ * Security: HASH ONLY (No Plain Text Fallback)
  */
 
-// --- 1. GLOBAL VARIABLES ---
-var client; // Menggunakan var agar lebih tahan banting di scope global
-var myName = "";
-var myRoom = "";
-var storageTopic = ""; 
-var broadcastTopic = "aksara-global-v1/announcements";
+let client;
+let myName = "";
+let myRoom = "";
+let storageTopic = ""; 
+const broadcastTopic = "aksara-global-v1/announcements";
 
-// PASSWORD ADMIN (Hash SHA-256 dari "p")
-var ADMIN_HASH = "83878c91171338902e0fe0fb97a8c47a828505289d1b8e9def57d66bd3451655";
-var ADMIN_PASS_TEXT = "p"; 
+// --- KEAMANAN: HANYA HASH ---
+// Hash SHA-256 dari "*". 
+// Tidak ada teks asli password di kode ini.
+const ADMIN_HASH = "83878c91171338902e0fe0fb97a8c47a828505289d1b8e9def57d66bd3451655";
 
 // State Variables
-var tempImageBase64 = null; // Wajib ada untuk upload gambar
-var isAdminMode = false; 
-var mediaRecorder = null;
-var audioChunks = [];
-var isRecording = false;
-var audioBlobData = null;
-var isSoundOn = true;
-var sendOnEnter = true;
-var replyingTo = null; 
-var onlineUsers = {};
-var typingTimeout;
-var localChatHistory = []; 
+let isAdminMode = false; 
+let tempImageBase64 = null; 
+let mediaRecorder, audioChunks = [], isRecording = false, audioBlobData = null;
+let isSoundOn = true;
+let sendOnEnter = true;
+let replyingTo = null; 
+let onlineUsers = {};
+let typingTimeout;
+let localChatHistory = []; 
 
 // Audio Elements
-var notifAudio = document.getElementById('notifSound');
-var sentAudio = document.getElementById('sentSound');
+const notifAudio = document.getElementById('notifSound');
+const sentAudio = document.getElementById('sentSound');
 
 
-// --- 2. HELPER FUNCTIONS ---
+// --- 1. HELPER FUNCTIONS ---
 
 async function digestMessage(message) {
     const msgBuffer = new TextEncoder().encode(message);
@@ -42,11 +39,9 @@ async function digestMessage(message) {
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// Menempelkan fungsi ke window agar terbaca oleh onclick HTML
-window.showToast = function(message, type = 'info') {
+function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container');
-    if (!container) return;
-    
+    if(!container) return;
     const toast = document.createElement('div');
     toast.className = 'toast';
     
@@ -63,9 +58,9 @@ window.showToast = function(message, type = 'info') {
     }, 3000);
 }
 
-window.toggleAdminMode = function(active) {
+function toggleAdminMode(active) {
     isAdminMode = active;
-    const wrapper = document.getElementById('input-wrapper');
+    const wrapper = document.getElementById('input-wrapper'); 
     const sendBtn = document.getElementById('send-btn');
     
     if (active) {
@@ -92,10 +87,9 @@ window.toggleAdminMode = function(active) {
 }
 
 
-// --- 3. INITIALIZATION ---
+// --- 2. INITIALIZATION ---
 
 window.onload = function() {
-    // Load Settings
     if(localStorage.getItem('aksara_name')) document.getElementById('username').value = localStorage.getItem('aksara_name');
     if(localStorage.getItem('aksara_room')) document.getElementById('room').value = localStorage.getItem('aksara_room');
     
@@ -103,26 +97,19 @@ window.onload = function() {
     sendOnEnter = (localStorage.getItem('aksara_enter') === 'true');
     
     const toggleS = document.getElementById('sound-toggle');
-    if(toggleS) { toggleS.checked = isSoundOn; toggleS.addEventListener('change', window.toggleSound); }
+    if(toggleS) toggleS.checked = isSoundOn;
     
     const toggleE = document.getElementById('enter-toggle');
-    if(toggleE) { toggleE.checked = sendOnEnter; toggleE.addEventListener('change', window.toggleEnterSettings); }
+    if(toggleE) toggleE.checked = sendOnEnter;
 
     const savedBg = localStorage.getItem('aksara_bg_image');
     if(savedBg) document.body.style.backgroundImage = `url(${savedBg})`;
-
-    // Event Listener khusus untuk Input (selain onclick)
-    const msgInput = document.getElementById('msg-input');
-    if(msgInput) {
-        msgInput.addEventListener('keydown', window.handleEnter);
-        msgInput.addEventListener('input', window.handleTyping);
-    }
 };
 
 
-// --- 4. CORE CONNECTION ---
+// --- 3. CONNECTION ---
 
-window.startChat = function() {
+function startChat() {
     const user = document.getElementById('username').value.trim();
     const room = document.getElementById('room').value.trim().toLowerCase();
     if (!user || !room) { showToast("Lengkapi data!", "error"); return; }
@@ -142,24 +129,40 @@ window.startChat = function() {
 
     loadFromLocal(); 
 
-    const options = { 
-        protocol: 'wss', type: 'mqtt', clean: true, 
-        reconnectPeriod: 1000, 
-        clientId: 'aks_' + Math.random().toString(16).substr(2, 8) 
+    const clientId = 'aks_' + Math.random().toString(16).substr(2, 8);
+    const host = 'wss://broker.emqx.io:8084/mqtt';
+
+    const options = {
+        keepalive: 60,
+        clientId: clientId,
+        protocolId: 'MQTT',
+        protocolVersion: 4,
+        clean: true,
+        reconnectPeriod: 1000,
+        connectTimeout: 30 * 1000,
+        will: { topic: myRoom, payload: 'Connection Closed', qos: 0, retain: false },
     };
-    client = mqtt.connect('wss://broker.emqx.io:8084/mqtt', options);
+
+    try {
+        client = mqtt.connect(host, options);
+    } catch (err) {
+        showToast("Gagal inisialisasi MQTT", "error");
+        return;
+    }
 
     client.on('connect', () => {
         document.getElementById('typing-indicator').innerText = "";
         client.subscribe(myRoom); 
-        client.subscribe(storageTopic); 
-        client.subscribe(broadcastTopic);
+        client.subscribe(storageTopic);
+        client.subscribe(broadcastTopic); 
         
         publishMessage("bergabung.", 'system');
         
         setInterval(() => { 
-            client.publish(myRoom, JSON.stringify({ type: 'ping', user: myName })); 
-            cleanOnlineList(); 
+            if(client.connected) {
+                client.publish(myRoom, JSON.stringify({ type: 'ping', user: myName })); 
+                cleanOnlineList(); 
+            }
         }, 10000);
     });
 
@@ -171,41 +174,24 @@ window.startChat = function() {
             try {
                 const data = JSON.parse(msgString);
                 if (data.type === 'admin_clear') {
-                    // Hapus semua pesan admin dari memory lokal
                     localChatHistory = localChatHistory.filter(msg => !msg.isAdmin && msg.type !== 'admin');
                     saveToLocal(); 
                     renderChat();
                     showToast("Pengumuman Admin Ditarik", "info");
                 } else {
-                    // Jika ada pesan admin baru, hapus yang lama dulu biar cuma 1
-                    localChatHistory = localChatHistory.filter(msg => !msg.isAdmin && msg.type !== 'admin');
                     handleIncomingMessage(data); 
                 }
             } catch(e) {}
             return;
         }
 
-        if (topic === storageTopic) { 
-            try { 
-                const srv = JSON.parse(msgString); 
-                if (Array.isArray(srv)) mergeWithLocal(srv); 
-            } catch(e) {} 
-            return; 
-        }
-
-        if (topic === myRoom) { 
-            try { 
-                const data = JSON.parse(msgString); 
-                if (data.type === 'ping') { updateOnlineList(data.user); return; } 
-                if (data.type === 'typing') { showTyping(data.user); return; } 
-                handleIncomingMessage(data); 
-            } catch(e) {} 
-        }
+        if (topic === storageTopic) { try { const srv = JSON.parse(msgString); if (Array.isArray(srv)) mergeWithLocal(srv); } catch(e) {} return; }
+        if (topic === myRoom) { try { const data = JSON.parse(msgString); if (data.type === 'ping') { updateOnlineList(data.user); return; } if (data.type === 'typing') { showTyping(data.user); return; } handleIncomingMessage(data); } catch(e) {} }
     });
 }
 
 
-// --- 5. MESSAGE LOGIC ---
+// --- 4. MESSAGE HANDLING ---
 
 function handleIncomingMessage(data) {
     const isSystem = (data.type === 'system' || data.type === 'admin_clear');
@@ -213,33 +199,33 @@ function handleIncomingMessage(data) {
     if (!isSystem) {
         if (!localChatHistory.some(msg => msg.id === data.id)) {
             localChatHistory.push(data);
-            
             if (localChatHistory.length > 77) localChatHistory = localChatHistory.slice(-77); 
             
             saveToLocal(); 
-            renderChat(); 
             
-            if (data.user !== myName) playSound('received');
-
-            // Admin tidak update storage room biasa
-            if (data.user === myName && !data.isAdmin) updateServerStorage();
+            const isMe = (data.user === myName);
+            const isAdm = (data.isAdmin || data.type === 'admin');
+            renderChat(isMe || isAdm); 
+            
+            if (!isMe) playSound('received');
+            if (isMe && !data.isAdmin) updateServerStorage();
         }
     } else {
         renderSingleElement(data);
     }
 }
 
-function renderChat() {
+function renderChat(forceScroll = false) {
     const chatBox = document.getElementById('messages');
     chatBox.innerHTML = '<div class="welcome-msg">Messages are encrypted and secure.</div>';
     localChatHistory.forEach(msg => { chatBox.appendChild(createMessageElement(msg)); });
-    scrollToBottom();
+    scrollToBottom(forceScroll);
 }
 
 function renderSingleElement(data) {
     const chatBox = document.getElementById('messages');
     chatBox.appendChild(createMessageElement(data));
-    scrollToBottom();
+    scrollToBottom(false);
 }
 
 function createMessageElement(data) {
@@ -247,7 +233,6 @@ function createMessageElement(data) {
     const isMe = data.user === myName;
     if (data.id) div.id = data.id;
 
-    // SYSTEM
     if (data.type === 'system') {
         div.style.textAlign = 'center'; div.style.fontSize = '11px'; 
         div.style.color = '#fff'; div.style.opacity = '0.7'; div.style.margin = '10px 0'; 
@@ -255,7 +240,6 @@ function createMessageElement(data) {
         return div;
     }
 
-    // ADMIN
     if (data.isAdmin || data.type === 'admin') {
         div.className = 'message admin';
         let contentHtml = "";
@@ -266,15 +250,10 @@ function createMessageElement(data) {
         } else {
             contentHtml = data.content.replace(/\n/g, '<br>');
         }
-        div.innerHTML = `
-            <div class="admin-badge">AKSARA <i class="material-icons" style="font-size:16px; color:#FFD700; margin-left:4px;">verified</i></div>
-            <div class="admin-content">${contentHtml}</div>
-            <div class="admin-time">${data.time}</div>
-        `;
+        div.innerHTML = `<div class="admin-badge">AKSARA <i class="material-icons" style="font-size:16px; color:#FFD700; margin-left:4px;">verified</i></div><div class="admin-content">${contentHtml}</div><div class="admin-time">${data.time}</div>`;
         return div;
     }
 
-    // NORMAL
     div.className = isMe ? 'message right' : 'message left';
     let contentHtml = "";
     if (data.type === 'text') contentHtml = `<span class="msg-content">${data.content}</span>`;
@@ -292,42 +271,16 @@ function createMessageElement(data) {
     return div;
 }
 
-function scrollToBottom() {
+function scrollToBottom(force = false) {
     const chatBox = document.getElementById('messages');
-    if (chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < 250) {
+    const isAtBottom = (chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight) < 150;
+    if (force || isAtBottom) {
         chatBox.scrollTop = chatBox.scrollHeight;
     }
 }
 
 
-// --- 6. UTILS (Storage & Logic) ---
-
-function loadFromLocal() {
-    const saved = localStorage.getItem(getStorageKey());
-    if (saved) { localChatHistory = JSON.parse(saved); renderChat(); }
-}
-function saveToLocal() { localStorage.setItem(getStorageKey(), JSON.stringify(localChatHistory)); }
-function getStorageKey() { return 'aksara_history_v29_' + myRoom; }
-function updateServerStorage() { client.publish(storageTopic, JSON.stringify(localChatHistory), { retain: true, qos: 1 }); }
-
-function mergeWithLocal(serverData) {
-    let changed = false;
-    serverData.forEach(srvMsg => {
-        if (!localChatHistory.some(locMsg => locMsg.id === srvMsg.id)) {
-            localChatHistory.push(srvMsg);
-            changed = true;
-        }
-    });
-    if (changed) {
-        localChatHistory.sort((a, b) => a.timestamp - b.timestamp);
-        if (localChatHistory.length > 77) localChatHistory = localChatHistory.slice(-77);
-        saveToLocal();
-        renderChat();
-    }
-}
-
-
-// --- 7. ACTIONS (Global Binding) ---
+// --- 5. ACTIONS ---
 
 function publishMessage(content, type = 'text', caption = '') {
     if (!content) return;
@@ -341,7 +294,7 @@ function publishMessage(content, type = 'text', caption = '') {
 
     if (isAdminMode) {
         finalTopic = broadcastTopic;
-        mqttOpts = { retain: true, qos: 1 };
+        mqttOpts = { retain: true, qos: 1 }; 
         if (type === 'text') finalType = 'admin';
     } else if (type === 'admin_clear') {
         finalTopic = broadcastTopic;
@@ -354,47 +307,44 @@ function publishMessage(content, type = 'text', caption = '') {
         isAdmin: isAdminMode 
     };
 
-    try { 
-        client.publish(finalTopic, JSON.stringify(payload), mqttOpts); 
-        if (isSoundOn && !isAdminMode && type !== 'system') playSound('sent');
-    } catch(e) { showToast("Gagal kirim", "error"); }
+    if (client && client.connected) {
+        try { 
+            client.publish(finalTopic, JSON.stringify(payload), mqttOpts); 
+            if (isSoundOn && !isAdminMode && type !== 'system') playSound('sent');
+        } catch(e) { showToast("Gagal kirim", "error"); }
+    } else {
+        showToast("Belum terkoneksi!", "error");
+    }
     
-    if (!isAdminMode) window.cancelReply();
+    if (!isAdminMode) cancelReply();
 }
 
-window.sendMessage = async function() {
+async function sendMessage() {
     const input = document.getElementById('msg-input');
     const text = input.value.trim();
-    
     if (!text) return;
 
-    // ADMIN LOGIN
     if (text.startsWith('/admin ')) {
         const pass = text.split(' ')[1];
         try {
             const hashed = await digestMessage(pass);
-            if (hashed === ADMIN_HASH || pass === ADMIN_PASS_TEXT) toggleAdminMode(true);
-            else showToast("Password Salah", "error");
-        } catch(e) { if(pass===ADMIN_PASS_TEXT) toggleAdminMode(true); }
-        input.value = ''; input.style.height = 'auto'; input.focus();
-        return;
+            if (hashed === ADMIN_HASH) toggleAdminMode(true);
+            else showToast("Password Salah!", "error");
+        } catch(e) { 
+            showToast("Admin hanya jalan di HTTPS/Online!", "error");
+        }
+        input.value = ''; input.style.height = 'auto'; input.focus(); return;
     }
 
-    // LOGOUT
-    if (text === '/exit') {
-        toggleAdminMode(false);
-        input.value = ''; input.style.height = 'auto'; input.focus();
-        return;
-    }
+    if (text === '/exit') { toggleAdminMode(false); input.value = ''; input.style.height = 'auto'; input.focus(); return; }
     
-    // HAPUS ADMIN
     if (text.startsWith('/hapusadmin')) {
         const pass = text.split(' ')[1];
         try {
             const hashed = await digestMessage(pass);
-            if (hashed === ADMIN_HASH || pass === ADMIN_PASS_TEXT) { publishMessage('clear', 'admin_clear'); showToast("Dihapus", "success"); }
+            if (hashed === ADMIN_HASH) { publishMessage('clear', 'admin_clear'); showToast("Dihapus", "success"); }
             else showToast("Password Salah", "error");
-        } catch(e) { if(pass===ADMIN_PASS_TEXT) { publishMessage('clear', 'admin_clear'); } }
+        } catch(e) { showToast("Admin hanya jalan di HTTPS/Online!", "error"); }
         input.value = ''; return;
     }
 
@@ -402,34 +352,49 @@ window.sendMessage = async function() {
     input.value = ''; input.style.height = 'auto'; input.focus();
 }
 
-// GLOBAL HELPERS (Window Binding)
-window.handleEnter = function(e) { if (e.key === 'Enter' && !e.shiftKey && sendOnEnter) { e.preventDefault(); window.sendMessage(); } }
-window.handleTyping = function() { if(client&&client.connected) client.publish(myRoom, JSON.stringify({type:'typing', user:myName})); const el=document.getElementById('msg-input'); el.style.height='auto'; el.style.height=el.scrollHeight+'px'; }
-window.showTyping = function(user) { if(user===myName)return; const ind=document.getElementById('typing-indicator'); ind.innerText=`${user} typing...`; clearTimeout(typingTimeout); typingTimeout=setTimeout(()=>{ind.innerText="";},2000); }
-window.updateOnlineList = function(user) { onlineUsers[user]=Date.now(); renderOnlineList(); }
-window.cleanOnlineList = function() { const now=Date.now(); for(const u in onlineUsers)if(now-onlineUsers[u]>20000)delete onlineUsers[u]; renderOnlineList(); }
+
+// --- 6. UTILS & HANDLERS ---
+
+function handleEnter(e) { if (e.key === 'Enter' && !e.shiftKey && sendOnEnter) { e.preventDefault(); sendMessage(); } }
+function handleTyping() { if(client&&client.connected) client.publish(myRoom, JSON.stringify({type:'typing', user:myName})); const el=document.getElementById('msg-input'); el.style.height='auto'; el.style.height=el.scrollHeight+'px'; }
+function showTyping(user) { if(user===myName)return; const ind=document.getElementById('typing-indicator'); ind.innerText=`${user} typing...`; clearTimeout(typingTimeout); typingTimeout=setTimeout(()=>{ind.innerText="";},2000); }
+function updateOnlineList(user) { onlineUsers[user]=Date.now(); renderOnlineList(); }
+function cleanOnlineList() { const now=Date.now(); for(const u in onlineUsers)if(now-onlineUsers[u]>20000)delete onlineUsers[u]; renderOnlineList(); }
 function renderOnlineList() { const l=document.getElementById('online-list'); l.innerHTML=""; for(const u in onlineUsers){ const li=document.createElement('li'); li.innerHTML=`<span style="color:var(--ios-green)">●</span> ${u}`; l.appendChild(li); } }
 
-window.toggleSidebar = function() { const sb=document.getElementById('sidebar'); const ov=document.getElementById('sidebar-overlay'); if(sb.style.left==='0px'){sb.style.left='-350px';sb.classList.remove('active');ov.style.display='none';}else{sb.style.left='0px';sb.classList.add('active');ov.style.display='block';} }
-window.handleBackgroundUpload = function(input) { const f=input.files[0]; if(f){ const r=new FileReader(); r.onload=e=>{try{localStorage.setItem('aksara_bg_image',e.target.result); document.body.style.backgroundImage=`url(${e.target.result})`; showToast("Background diganti","success");}catch(e){showToast("Gambar kebesaran","error");}}; r.readAsDataURL(f); } }
-window.resetBackground = function() { localStorage.removeItem('aksara_bg_image'); document.body.style.backgroundImage=""; showToast("Background reset","info"); }
-window.toggleSound = function() { isSoundOn=document.getElementById('sound-toggle').checked; localStorage.setItem('aksara_sound',isSoundOn); }
-window.toggleEnterSettings = function() { sendOnEnter=document.getElementById('enter-toggle').checked; localStorage.setItem('aksara_enter',sendOnEnter); }
-window.leaveRoom = function() { if(confirm("Keluar?")) { publishMessage("telah keluar.", 'system'); localStorage.removeItem('aksara_name'); localStorage.removeItem('aksara_room'); location.reload(); } }
-
+function handleBackgroundUpload(input) { const f=input.files[0]; if(f){ const r=new FileReader(); r.onload=e=>{try{localStorage.setItem('aksara_bg_image',e.target.result); document.body.style.backgroundImage=`url(${e.target.result})`; showToast("Background diganti","success");}catch(e){showToast("Gambar kebesaran","error");}}; r.readAsDataURL(f); } }
+function resetBackground() { localStorage.removeItem('aksara_bg_image'); document.body.style.backgroundImage=""; showToast("Background reset","info"); }
+function toggleSound() { isSoundOn=document.getElementById('sound-toggle').checked; localStorage.setItem('aksara_sound',isSoundOn); }
+function toggleEnterSettings() { sendOnEnter=document.getElementById('enter-toggle').checked; localStorage.setItem('aksara_enter',sendOnEnter); }
 function playSound(type) { if (!isSoundOn) return; const audio = (type === 'sent') ? sentAudio : notifAudio; if (audio) { audio.volume = (type === 'sent') ? 0.4 : 1.0; audio.currentTime = 0; audio.play().catch(() => {}); } }
 
-// MEDIA HANDLERS
-window.triggerImageUpload = function() { document.getElementById('chat-file-input').click(); }
-window.handleImageUpload = function(input) { const f=input.files[0]; if(f){ const r=new FileReader(); r.onload=e=>{ tempImageBase64 = e.target.result; document.getElementById('preview-img').src=tempImageBase64; document.getElementById('image-preview-modal').style.display='flex'; }; r.readAsDataURL(f); } input.value=""; }
-window.cancelImagePreview = function() { document.getElementById('image-preview-modal').style.display='none'; document.getElementById('img-caption').value=""; tempImageBase64=null; }
-window.sendImageWithCaption = function() {
+function loadFromLocal() { const saved = localStorage.getItem(getStorageKey()); if (saved) { localChatHistory = JSON.parse(saved); renderChat(); } }
+function saveToLocal() { localStorage.setItem(getStorageKey(), JSON.stringify(localChatHistory)); }
+function getStorageKey() { return 'aksara_history_v29_' + myRoom; }
+function updateServerStorage() { client.publish(storageTopic, JSON.stringify(localChatHistory), { retain: true, qos: 1 }); }
+function mergeWithLocal(serverData) { let changed = false; serverData.forEach(srvMsg => { if (!localChatHistory.some(locMsg => locMsg.id === srvMsg.id)) { localChatHistory.push(srvMsg); changed = true; } }); if (changed) { localChatHistory.sort((a, b) => a.timestamp - b.timestamp); if (localChatHistory.length > 77) localChatHistory = localChatHistory.slice(-77); saveToLocal(); renderChat(); } }
+
+// MEDIA (OnClick)
+function triggerImageUpload() { document.getElementById('chat-file-input').click(); }
+function handleImageUpload(input) { 
+    const f = input.files[0]; 
+    if(f){ const r=new FileReader(); r.onload=e=>{ tempImageBase64 = e.target.result; document.getElementById('preview-img').src=tempImageBase64; document.getElementById('image-preview-modal').style.display='flex'; }; r.readAsDataURL(f); } input.value=""; 
+}
+function cancelImagePreview() { document.getElementById('image-preview-modal').style.display='none'; document.getElementById('img-caption').value=""; tempImageBase64=null; }
+function sendImageWithCaption() {
     if(!tempImageBase64) return;
     const caption = document.getElementById('img-caption').value.trim(); const img = new Image(); img.src = tempImageBase64;
     img.onload = function() { const c = document.createElement('canvas'); const ctx = c.getContext('2d'); const s = 300/img.width; c.width = 300; c.height = img.height * s; ctx.drawImage(img, 0, 0, c.width, c.height); publishMessage(c.toDataURL('image/jpeg', 0.6), 'image', caption); cancelImagePreview(); }
 }
+function sendVoiceNote() { const r = new FileReader(); r.readAsDataURL(audioBlobData); r.onloadend = () => { publishMessage(r.result, 'audio'); cancelVoiceNote(); }; }
+function cancelVoiceNote() { audioBlobData = null; document.getElementById('vn-preview-bar').style.display = 'none'; document.getElementById('main-input-area').style.display = 'flex'; }
+function setReply(id, user, text) { replyingTo = { id, user, text }; document.getElementById('reply-preview-bar').style.display = 'flex'; document.getElementById('reply-to-user').innerText = user; document.getElementById('reply-preview-text').innerText = text.substring(0,50)+'...'; document.getElementById('msg-input').focus(); }
+function cancelReply() { replyingTo = null; document.getElementById('reply-preview-bar').style.display = 'none'; }
+function scrollToMessage(msgId) { const el = document.getElementById(msgId); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('flash-highlight'); setTimeout(() => el.classList.remove('flash-highlight'), 1000); } else { showToast("Pesan tidak ditemukan.", "info"); } }
+function openLightbox(src) { document.getElementById('lightbox-img').src = src; document.getElementById('lightbox-overlay').style.display = 'flex'; }
+function closeLightbox(e) { if (e.target.classList.contains('lightbox-close') || e.target.id === 'lightbox-overlay') { document.getElementById('lightbox-overlay').style.display = 'none'; } }
 
-window.toggleRecording = async function() {
+async function toggleRecording() {
     if (!isRecording) {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -440,11 +405,5 @@ window.toggleRecording = async function() {
         } catch (err) { showToast("Butuh izin mic!", "error"); }
     } else { mediaRecorder.stop(); isRecording = false; document.getElementById('mic-btn').classList.remove('recording'); }
 }
-window.sendVoiceNote = function() { const r = new FileReader(); r.readAsDataURL(audioBlobData); r.onloadend = () => { publishMessage(r.result, 'audio'); window.cancelVoiceNote(); }; }
-window.cancelVoiceNote = function() { audioBlobData = null; document.getElementById('vn-preview-bar').style.display = 'none'; document.getElementById('main-input-area').style.display = 'flex'; }
-
-window.setReply = function(id, user, text) { replyingTo = { id, user, text }; document.getElementById('reply-preview-bar').style.display = 'flex'; document.getElementById('reply-to-user').innerText = user; document.getElementById('reply-preview-text').innerText = text.substring(0,50)+'...'; document.getElementById('msg-input').focus(); }
-window.cancelReply = function() { replyingTo = null; document.getElementById('reply-preview-bar').style.display = 'none'; }
-window.scrollToMessage = function(msgId) { const el = document.getElementById(msgId); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('flash-highlight'); setTimeout(() => el.classList.remove('flash-highlight'), 1000); } else { showToast("Pesan tidak ditemukan.", "info"); } }
-window.openLightbox = function(src) { document.getElementById('lightbox-img').src = src; document.getElementById('lightbox-overlay').style.display = 'flex'; }
-window.closeLightbox = function(e) { if (e.target.classList.contains('lightbox-close') || e.target.id === 'lightbox-overlay') { document.getElementById('lightbox-overlay').style.display = 'none'; } }
+function leaveRoom() { if(confirm("Keluar?")) { publishMessage("telah keluar.", 'system'); localStorage.removeItem('aksara_name'); localStorage.removeItem('aksara_room'); location.reload(); } }
+function toggleSidebar() { const sb=document.getElementById('sidebar'); const ov=document.getElementById('sidebar-overlay'); if(sb.style.left==='0px'){sb.style.left='-350px';sb.classList.remove('active');ov.style.display='none';}else{sb.style.left='0px';sb.classList.add('active');ov.style.display='block';} }
