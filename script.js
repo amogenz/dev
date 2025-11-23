@@ -7,9 +7,7 @@ const broadcastTopic = "aksara-global-v1/announcements";
 const notifAudio = document.getElementById('notifSound');
 const sentAudio = document.getElementById('sentSound');
 
-// --- KEAMANAN: KODE HASH PASSWORD ---
-// Ini adalah hasil acakan dari "amogenz123".
-// Orang lain yang lihat kode ini TIDAK BISA menebak password aslinya.
+
 const ADMIN_HASH_KEY = "1802662251"; 
 
 let mediaRecorder, audioChunks = [], isRecording = false, audioBlobData = null;
