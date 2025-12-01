@@ -40,11 +40,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // =========================================
-    // 2. AMMO AI LOGIC (SERVERLESS / SECURE MODE)
+    // 2. AMMO AI LOGIC (SERVERLESS + MEMORY)
     // =========================================
     const chatHistory = document.getElementById('chat-history');
     const userInput = document.getElementById('user-input');
     const sendBtn = document.getElementById('send-btn');
+
+    // [TAMBAHAN 1] Variabel untuk menyimpan ingatan chat sementara
+    let conversationHistory = []; 
 
     // FUNGSI HELPER 1: Scroll ke bawah otomatis
     const scrollToBottom = () => {
@@ -86,11 +89,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             // 3. Tembak API Serverless Kita (/api/chat)
-            // Prompt kasar/toxic kamu setting-nya ada di file 'api/chat.js', bukan disini.
             const response = await fetch('/api/chat', {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ message: text }) 
+                body: JSON.stringify({ 
+                    message: text,
+                    history: conversationHistory // [TAMBAHAN 2] Kirim ingatan ke server
+                }) 
             });
 
             const data = await response.json();
@@ -104,11 +109,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 4. Proses Jawaban AI
             let aiResponseText = "Gue bingung.";
+            let rawTextForHistory = ""; // Variabel buat nyimpen teks asli
+
             if (data.candidates && data.candidates[0].content) {
                 let rawText = data.candidates[0].content.parts[0].text;
+                rawTextForHistory = rawText; // Simpan teks polos buat ingatan
+
+                // Format HTML (Bold & Enter) untuk ditampilkan
                 aiResponseText = rawText
-                    .replace(/\*\*(.*?)\*\*/g, '<b style="color:#fff;">$1</b>') // Bold
-                    .replace(/\n/g, '<br>'); // Enter
+                    .replace(/\*\*(.*?)\*\*/g, '<b style="color:#fff;">$1</b>') 
+                    .replace(/\n/g, '<br>'); 
                 
                 // Cek apakah dia habis googling
                 if (data.candidates[0].groundingMetadata?.searchEntryPoint) {
@@ -116,6 +126,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
             appendMessage('ai', aiResponseText);
+
+            // [TAMBAHAN 3] Simpan percakapan ini ke ingatan browser
+            conversationHistory.push({ role: "user", parts: [{ text: text }] });
+            conversationHistory.push({ role: "model", parts: [{ text: rawTextForHistory }] });
 
         } catch (error) {
             if(chatHistory.contains(loadingDiv)) chatHistory.removeChild(loadingDiv);
