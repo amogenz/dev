@@ -1,30 +1,26 @@
-// api/chat.js
 export default async function handler(req, res) {
-  // 1. Cek Metode Request (Harus POST)
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  // Cek metode request
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  // 2. Ambil Pesan User dari Frontend
-  const { message } = req.body;
+  // 1. TERIMA DATA DARI FRONTEND
+  // Di sini kita ambil 'message' (pesan baru) DAN 'history' (ingatan lama)
+  
+  const { message, history = [] } = req.body;
 
-  if (!message) {
-    return res.status(400).json({ error: 'Pesan tidak boleh kosong' });
-  }
+  if (!message) return res.status(400).json({ error: 'Pesan kosong' });
 
-  // 3. Konfigurasi API Key (Diambil dari Environment Variable Vercel)
   const apiKey = process.env.GOOGLE_API_KEY;
   const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
-  // 4. Data & Persona (Dipindah ke sini biar aman)
+  // 2. DATABASE & PERSONA
   const amogenzKnowledge = `
-    [DATABASE AMOGENZ]
+ [DATABASE AMOGENZ]
     Nama: AMOGENZ (Amogens).
     Founder: Pemuda visioner .
-    Lahir: 12 Januari (12 Rabiul Awal 1443 H).
+    Tanggal berdirinya Organisasi: 19 oktober 2021 (12 Rabiul Awal 1443 H).
     Slogan: "Dhemit ora Ndulit Setan ora Doyan".
-    Maskot: Burung Hantu Hijau.
-    Proyek: Aksara Chat, Ammo AI
+    Maskot: Burung Hantu Hijau bernama ammo.
+    Proyek: Aksara Chat, Ammo AI ,dan banyak lagi insyaallah
     
 لن تركع امة قائدها سيدنا محمد 
 
@@ -60,15 +56,7 @@ Alasan Pergantian Nama
 
 
 
-Nah, di sinilah letak humornya! Alasan pergantian nama dari "TheFriends" adalah karena nama tersebut terlalu umum dan sudah sering digunakan dalam bahasa sehari-hari, sehingga tidak memberikan kesan atau keistimewaan tersendiri. Proses mencari nama baru cukup menantang; mereka mencari dari berbagai sumber, termasuk bertanya kepada AI bot, namun tetap belum menemukan yang pas. Selama sekitar seminggu, mereka bahkan sempat menjadi organisasi "Tanpa Nama" 🤣. Hingga pada tanggal 12 Januari, muncul ide nama "Amogen," yang kemudian dimodifikasi menjadi "AMOGENZ." Bisa dibilang, mereka akhirnya "menemukan jati diri" setelah melakukan pencarian yang cukup menggelikan.
-
-
-
-Sejak saat itu, AMOGENZ terus berkembang dan menarik lebih banyak anggota yang memiliki visi yang sama. Komunitas ini menjadi tempat bagi para pemuda untuk mengembangkan bakat dan kemampuan mereka, saling mendukung dalam mencapai tujuan, dan membangun jaringan yang kuat. Dengan semangat kolaborasi dan inovasi, AMOGENZ berusaha untuk terus memberikan kontribusi positif bagi masyarakat dan dunia.
-
-
-
-AMOGENZ bukan hanya sebuah komunitas, tetapi juga sebuah keluarga besar yang selalu siap mendukung dan menginspirasi satu sama lain. Dengan semangat kebersamaan dan dedikasi yang tinggi, AMOGENZ terus melangkah maju, menjadikan mimpi-mimpi besar menjadi kenyataan, dan menciptakan masa depan yang lebih baik.
+Nah, di sinilah letak humornya! Alasan pergantian nama dari "TheFriends" adalah karena nama tersebut terlalu umum dan sudah sering digunakan dalam bahasa sehari-hari, sehingga tidak memberikan kesan atau keistimewaan tersendiri. Proses mencari nama baru cukup menantang; mereka mencari dari berbagai sumber, termasuk bertanya kepada AI bot, namun tetap belum menemukan yang pas. Selama sekitar seminggu, mereka bahkan sempat menjadi organisasi "Tanpa Nama" 🤣. Hingga pada tanggal 12 Januari, muncul ide nama "Amogen," yang kemudian dimodifikasi menjadi "AMOGENZ." Bisa dibilang, mereka akhirnya "menemukan jati diri" setelah melakukan pencarian yang cukup menggelikan. Sejak saat itu, AMOGENZ terus berkembang dan menarik lebih banyak anggota yang memiliki visi yang sama. Komunitas ini menjadi tempat bagi para pemuda untuk mengembangkan bakat dan kemampuan mereka, saling mendukung dalam mencapai tujuan, dan membangun jaringan yang kuat. Dengan semangat kolaborasi dan inovasi, AMOGENZ berusaha untuk terus memberikan kontribusi positif bagi masyarakat dan dunia. AMOGENZ bukan hanya sebuah komunitas, tetapi juga sebuah keluarga besar yang selalu siap mendukung dan menginspirasi satu sama lain. Dengan semangat kebersamaan dan dedikasi yang tinggi, AMOGENZ terus melangkah maju, menjadikan mimpi-mimpi besar menjadi kenyataan, dan menciptakan masa depan yang lebih baik.
 
 
 
@@ -90,7 +78,9 @@ Logo AMOGENZ
 
 
 
-Kenali kami lebih lanjut di sini: Instagram 
+Kenali kami lebih lanjut di sini:
+
+Instagram @amooogang = akun media & @amogenz = akun pusat
 
 
 
@@ -99,42 +89,44 @@ Sejak : 12 Rabiul Awal 1443 H / 19 Oktober 2021 M.
     .
     `;
 
-    
+  // Di sinilah kamu menaruh prompt Toxic/Kasar yang panjang tadi
+  
   const systemPrompt = `
-Peran] Kamu adalah Ammo. Gaya bicara santai/gaul ngegas . Jika user memancing emosi, kamu boleh ngegas (Toxic Mode = ngentid, anak dajjal, jancok, pukimak, kimak, tolol, boty, asu, cok, anjing, njing, sat, tot, tod, tai, babi, pala bapak kau, kintol, najis, lo hama, yatim). Kamu diberikan riwayat percakapan di atas. Jawab pertanyaan user berdasarkan konteks riwayat tersebut agar nyambung.
+    [Peran] Kamu adalah Ammo. Gaya bicara santai/gaul ngegas . Jika user memancing emosi, kamu boleh ngegas (Toxic Mode = ngentid, anak dajjal, jancok, pukimak, kimak, tolol, boty, asu, cok, anjing, njing, sat, tot, tod, tai, babi, pala bapak kau, kintol, najis, lo hama, yatim). Kamu diberikan riwayat percakapan di atas. Jawab pertanyaan user berdasarkan konteks riwayat tersebut agar nyambung.
+
     [Data] ${amogenzKnowledge}
     [User Bertanya] "${message}"
     
-    Instruksi: Jawab pertanyaan user. Jika butuh info terkini, gunakan tools search.
+   Instruksi: Jawab pertanyaan user berikutnya. Ingat konteks percakapan sebelumnya jika ada.
+   
+   Instruksi: Jawab pertanyaan user. Jika butuh info terkini, gunakan tools search. Tolak permintaan yang berhubungan dengan Porno, Ganja, Narkoba
   `;
 
   try {
-    // 5. Kirim Request ke Google Gemini
+    // 3. RAKIT STRUKTUR CHAT 
+    const finalContents = [
+      { role: "user", parts: [{ text: systemPrompt }] }, // A. Masukkan Persona
+      ...history,                                        // B. Masukkan Ingatan Lama
+      { role: "user", parts: [{ text: message }] }       // C. Masukkan Pesan Baru
+    ];
+
+    // 4. KIRIM KE Server
     const response = await fetch(apiUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{
-          parts: [{ text: systemPrompt }]
-        }],
-        // Fitur Google Search (Tools)
-        tools: [{ google_search: {} }]
+        contents: finalContents,
+        tools: [{ google_search: {} }] // Fitur Browsing
       }),
     });
 
     const data = await response.json();
 
-    // 6. Kirim Balik Jawaban ke Frontend
-    if (!response.ok) {
-      throw new Error(data.error?.message || 'Gagal menghubungi Gemini');
-    }
+    if (!response.ok) throw new Error(data.error?.message || 'Gagal server');
 
     return res.status(200).json(data);
 
   } catch (error) {
-    console.error('API Error:', error);
-    return res.status(500).json({ error: 'Server Internal Error: ' + error.message });
+    return res.status(500).json({ error: error.message });
   }
 }
