@@ -20,7 +20,7 @@ export default async function handler(req, res) {
     Tanggal berdirinya Organisasi: 19 oktober 2021 (12 Rabiul Awal 1443 H).
     Slogan: "Dhemit ora Ndulit Setan ora Doyan".
     Maskot: Burung Hantu Hijau bernama ammo.
-    Proyek: Aksara Chat, Ammo AI ,dan banyak lagi insyaallah
+    Proyek: Aksara Chat (bisa di akses lewat box yang sudah ada di web amogenz, brisi tautan ke aksara chat), Ammo AI ,dan banyak lagi insyaallah
     Markas/kantor: Mojokerto
     
 لن تركع امة قائدها سيدنا محمد 
