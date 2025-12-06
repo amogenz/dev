@@ -1,0 +1,785 @@
+:root {
+    --primary-green: #39FF14;
+    --dark-green: #003300;
+    --glass-bg: rgba(20, 20, 20, 0.65);
+    --glass-border: rgba(57, 255, 20, 0.15);
+    --text-main: #f0f0f0;
+    --text-muted: #888888;
+    --font-heading: 'Space Grotesk', sans-serif;
+    --font-body: 'Outfit', sans-serif;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    cursor: none; /* Hide default cursor for custom one */
+}
+
+body {
+    background-color: #050505;
+    color: var(--text-main);
+    font-family: var(--font-body);
+    line-height: 1.7;
+    overflow-x: hidden;
+    min-height: 100vh;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+}
+::-webkit-scrollbar-track {
+    background: #0a0a0a;
+}
+::-webkit-scrollbar-thumb {
+    background: #1a1a1a;
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-green);
+}
+
+/* Custom Cursor */
+.cursor-dot,
+.cursor-outline {
+    position: fixed;
+    top: 0;
+    left: 0;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    z-index: 9999;
+    pointer-events: none;
+}
+.cursor-dot {
+    width: 5px;
+    height: 5px;
+    background-color: var(--primary-green);
+}
+.cursor-outline {
+    width: 30px;
+    height: 30px;
+    border: 1px solid var(--primary-green);
+    transition: width 0.2s, height 0.2s, background-color 0.2s;
+}
+
+/* Ambient Background */
+.orb {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(120px);
+    z-index: -2;
+    opacity: 0.4;
+    animation: float 10s infinite ease-in-out alternate;
+}
+.orb-1 { width: 350px; height: 350px; background: var(--primary-green); top: -100px; left: -100px; }
+.orb-2 { width: 300px; height: 300px; background: #004d1a; bottom: -50px; right: -50px; animation-delay: -5s; }
+
+/* Noise Texture for gritty feel */
+.noise-overlay {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc0MDAlJyBoZWlnaHQ9JzQwMCUnPjxmaWx0ZXIgaWQ9J25vaXNlJz48ZmVUdXJidWxlbmNlIHR5cGU9J2ZyYWN0YWxOb2lzZScgYmFzZUZyZXF1ZW5jeT0nMC45JyBudW1PY3RhdmVzPScxJyBzdGl0Y2hUaWxlcz0nc3RpdGNoJy8+PC9maWx0ZXI+PHJlY3Qgd2lkdGg9JzEwMCUnIGhlaWdodD0nMTAwJScgZmlsdGVyPSd1cmwoI25vaXNlKScgb3BhY2l0eT0nMC4wNScvPjwvc3ZnPg==');
+    pointer-events: none;
+    z-index: -1;
+}
+
+@keyframes float {
+    0% { transform: translate(0, 0); }
+    100% { transform: translate(40px, 60px); }
+}
+
+/* Update bagian container biar web jadi lebar */
+.container {
+    max-width: 1000px; /* Dulu 680px, sekarang 1000px biar lega */
+    margin: 0 auto;
+    padding: 20px;
+    width: 95%; /* Biar aman di HP */
+}
+
+/* Pastikan terminal ngikut lebar container */
+.terminal-window {
+    width: 100%; 
+    height: 500px; /* Kita tinggiin dikit sekalian */
+}
+
+
+/* Header */
+header {
+    text-align: center;
+    padding: 80px 0 50px;
+}
+
+.logo-wrapper {
+    position: relative;
+    display: inline-block;
+    margin-bottom: 20px;
+}
+
+.main-logo {
+    width: 140px;
+    height: auto;
+    border-radius: 24px;
+    position: relative;
+    z-index: 2;
+    transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.logo-glow {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 100%; height: 100%;
+    background: var(--primary-green);
+    filter: blur(40px);
+    opacity: 0.3;
+    z-index: 1;
+    animation: pulse 3s infinite;
+}
+
+.brand-name {
+    font-family: var(--font-heading);
+    font-size: 2.5rem;
+    letter-spacing: -1px;
+    margin-bottom: 5px;
+    text-shadow: 0 0 20px rgba(57, 255, 20, 0.3);
+}
+
+.subtitle {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+}
+
+/* Glass Cards */
+.glass-card {
+    background: var(--glass-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px;
+    padding: 30px;
+    margin-bottom: 24px;
+    transition: transform 0.4s ease, border-color 0.4s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.glass-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%;
+    width: 100%; height: 100%;
+    background: linear-gradient(90deg, transpnt, rgba(255,255,255,0.05), transparent);
+    transition: 0.5s;
+}
+
+.glass-card:hover {
+    transform: translateY(-5px);
+    border-color: var(--primary-green);
+}
+
+.glass-card:hover::before {
+    left: 100%;
+}
+
+/* Typography Inside Cards */
+h2 {
+    font-family: var(--font-heading);
+    font-size: 1.5rem;
+    margin-bottom: 20px;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.accent { color: var(--primary-green); }
+
+p {
+    margin-bottom: 15px;
+    color: #cccccc;
+    font-weight: 300;
+}
+
+/* Quote Section */
+.quote-box {
+    text-align: center;
+    border-left: 3px solid var(--primary-green);
+    background: linear-gradient(90deg, rgba(57, 255, 20, 0.05), transparent);
+    padding: 20px;
+    margin-bottom: 20px;
+    border-radius: 0 12px 12px 0;
+}
+.quote-arabic {
+    font-family: 'Times New Roman', serif;
+    font-size: 1.4rem;
+    display: block;
+    margin-bottom: 8px;
+    color: var(--primary-green);
+}
+.javanese-quote {
+    text-align: center;
+    font-style: italic;
+    color: var(--primary-green);
+    opacity: 0.8;
+    margin-bottom: 20px;
+    font-family: var(--font-heading);
+}
+
+/* Lists */
+.visual-list { list-style: none; }
+.visual-list li {
+    margin-bottom: 15px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.visual-list li:last-child { border-bottom: none; }
+.visual-list strong {
+    display: block;
+    color: #fff;
+    font-size: 1.1rem;
+    margin-bottom: 4px;
+}
+.visual-list span { font-size: 0.9rem; color: #999; }
+
+/* Button */
+.btn {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    background: var(--primary-green);
+    color: #000;
+    font-weight: 700;
+    padding: 16px 30px;
+    border-radius: 12px;
+    text-decoration: none;
+    width: 100%;
+    margin-top: 10px;
+    transition: all 0.3s ease;
+    font-family: var(--font-heading);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.btn:hover {
+    background: #fff;
+    box-shadow: 0 0 20px rgba(57, 255, 20, 0.6);
+    transform: scale(1.02);
+}
+
+/* Footer */
+footer {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin-top: 40px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+}
+.badge {
+    display: inline-block;
+    border: 1px solid var(--primary-green);
+    color: var(--primary-green);
+    padding: 5px 12px;
+    border-radius: 50px;
+    font-size: 0.7rem;
+    margin-bottom: 15px;
+    font-weight: 700;
+}
+
+/* Animations */
+@keyframes pulse {
+    0% { transform: translate(-50%, -50%) scale(0.95); opacity: 0.3; }
+    50% { transform: translate(-50%, -50%) scale(1.1); opacity: 0.5; }
+    100% { transform: translate(-50%, -50%) scale(0.95); opacity: 0.3; }
+}
+
+/* Reveal Animation State */
+.reveal-item {
+    opacity: 0;
+    transform: translateY(30px);
+    transition: all 0.8s ease-out;
+}
+.reveal-item.active {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Mobile Responsive */
+@media (max-width: 600px) {
+    .brand-name { font-size: 2rem; }
+    .glass-card { padding: 20px; }
+    .cursor-dot, .cursor-outline { display: none; } /* Disable custom cursor on mobile */
+    * { cursor: auto; }
+}
+
+/* ========================================= */
+/* NEW FEATURES (AKSARA & AI)          */
+/* ========================================= */
+
+/* --- AKSARA PROJECT --- */
+.card-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.status-badge {
+    background: rgba(57, 255, 20, 0.1);
+    border: 1px solid var(--primary-green);
+    padding: 5px 12px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-family: var(--font-heading);
+    letter-spacing: 2px;
+    color: var(--primary-green);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    background-color: var(--primary-green);
+    border-radius: 50%;
+    box-shadow: 0 0 10px var(--primary-green);
+    animation: blink 2s infinite;
+}
+
+@keyframes blink {
+    0% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.8); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+.tech-stack {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 25px;
+}
+
+.tech-stack span {
+    font-size: 0.7rem;
+    color: #888;
+    background: rgba(255,255,255,0.05);
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-family: monospace;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+/* Holographic Button */
+.btn-holo {
+    position: relative;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+    background: transparent;
+    border: 1px solid var(--primary-green);
+    color: var(--primary-green);
+    text-decoration: none;
+    font-family: var(--font-heading);
+    font-weight: 700;
+    letter-spacing: 1px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    border-radius: 0;
+    clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+}
+
+.btn-holo:hover {
+    background: var(--primary-green);
+    color: #000;
+    box-shadow: 0 0 30px rgba(57, 255, 20, 0.4);
+}
+
+.btn-holo svg {
+    transition: transform 0.3s ease;
+}
+
+.btn-holo:hover svg {
+    transform: translateX(5px);
+}
+
+.btn-holo:hover .btn-glitch {
+    position: absolute;
+    top: 0; left: -100%;
+    width: 100%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.8), transparent);
+    animation: glitch-anim 0.5s linear;
+}
+
+@keyframes glitch-anim {
+    0% { left: -100%; }
+    100% { left: 100%; }
+}
+
+/* --- AMMO AI STYLES --- */
+.ai-header {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.ai-icon {
+    position: relative;
+    color: var(--primary-green);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.pulse-ring {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    border: 2px solid var(--primary-green);
+    border-radius: 50%;
+    animation: ripple 2s infinite;
+    opacity: 0;
+}
+
+@keyframes ripple {
+    0% { transform: scale(0.8); opacity: 0.8; }
+    100% { transform: scale(2); opacity: 0; }
+}
+
+.ai-version {
+    font-size: 0.8rem;
+    background: #333;
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: #fff;
+    margin-left: 10px;
+}
+
+.terminal-window {
+    background: #0a0a0a;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 15px;
+    font-family: 'Courier New', monospace;
+    margin-bottom: 15px;
+    box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+    min-height: 120px;
+}
+
+.terminal-header {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #222;
+    padding-bottom: 8px;
+}
+
+.dot { width: 10px; height: 10px; border-radius: 50%; }
+.red { background: #ff5f56; }
+.yellow { background: #ffbd2e; }
+.green { background: #27c93f; }
+
+.terminal-content {
+    color: var(--primary-green);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    text-shadow: 0 0 5px rgba(57, 255, 20, 0.5);
+}
+
+.cursor-blink {
+    animation: blinkCursor 1s infinite;
+    font-weight: bold;
+    color: var(--primary-green);
+}
+
+@keyframes blinkCursor {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
+
+.ai-caption {
+    font-size: 0.85rem;
+    color: #666;
+    margin-bottom: 15px;
+}
+
+.btn-small {
+    background: transparent;
+    border: 1px solid var(--primary-green);
+    color: var(--primary-green);
+    padding: 8px 16px;
+    font-family: var(--font-heading);
+    cursor: none;
+    font-size: 0.75rem;
+    letter-spacing: 1px;
+    transition: all 0.3s;
+}
+
+.btn-small:hover {
+    background: var(--primary-green);
+    color: #000;
+}
+
+
+/* ========================================= */
+/* AMMO AI STYLE (TRANSPARENT & WIDE)        */
+/* ========================================= */
+
+/* Container Utama diperlebar */
+.container {
+    max-width: 1200px; /* Sangat Lebar */
+    width: 95%;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.ai-section-transparent {
+    margin-top: 40px;
+    margin-bottom: 80px;
+    position: relative;
+}
+
+/* Header */
+.ai-header-simple {
+    text-align: center;
+    margin-bottom: 30px;
+}
+.ai-header-simple h2 {
+    font-size: 2rem;
+    color: #fff;
+    text-shadow: 0 0 20px rgba(57, 255, 20, 0.4);
+}
+.ai-badge {
+    font-size: 0.8rem;
+    background: var(--primary-green);
+    color: #000;
+    padding: 2px 8px;
+    border-radius: 4px;
+    vertical-align: middle;
+}
+
+/* --- AREA CHAT (KUNCI PERUBAHAN) --- */
+
+/* --- AREA CHAT (UPDATE BIAR RAPET) --- */
+.chat-area-transparent {
+    /* UBAH BAGIAN INI: */
+    height: auto;        /* Tinggi menyesuaikan isi pesan */
+    min-height: 150px;   /* Tinggi minimal biar gak terlalu gepeng pas kosong */
+    max-height: 60vh;    /* Batas maksimal tinggi sebelum muncul scroll */
+    
+    /* Agar bisa di-scroll kalau chat udah panjang */
+    overflow-y: auto; 
+    
+    /* Tampilan */
+    background: transparent;
+    border: none;
+    padding: 0 10px; /* Padding kiri-kanan aja */
+    
+    /* Tata Letak Pesan */
+    display: flex;
+    flex-direction: column;
+    gap: 15px; /* Jarak antar chat (dikurangi dari 25px biar lebih rapet) */
+    
+    scroll-behavior: smooth;
+    
+    /* Jarak ke Input Box di bawahnya */
+    margin-bottom: 10px; /* Dikurangi dari 20px biar lebih deket */
+    border-bottom: 1px solid rgba(255,255,255,0.05); 
+}
+
+
+/* Scrollbar styling */
+.chat-area-transparent::-webkit-scrollbar { width: 6px; }
+.chat-area-transparent::-webkit-scrollbar-thumb { background: rgba(57, 255, 20, 0.3); border-radius: 10px; }
+.chat-area-transparent::-webkit-scrollbar-track { background: transparent; }
+
+/* --- BUBBLE CHAT --- */
+.message {
+    font-family: 'Outfit', sans-serif; /* Font enak dibaca, bukan kotak-kotak */
+    font-size: 1.1rem; /* Ukuran huruf besar */
+    line-height: 1.6;
+    max-width: 100%; /* Pakai lebar penuh */
+    
+    /* INI SOLUSI TEKS TURUN KE BAWAH */
+    white-space: pre-wrap; /* Baca enter/spasi */
+    word-wrap: break-word; /* Paksa turun kalau panjang */
+    overflow-wrap: break-word;
+}
+
+/* Style Pesan AI */
+.ai-msg {
+    color: #e0e0e0; /* Putih agak abu biar mata ga sakit */
+    text-align: left;
+    border-left: 3px solid var(--primary-green);
+    padding-left: 15px;
+}
+.ai-msg .prefix {
+    color: var(--primary-green);
+    font-weight: bold;
+    display: block; /* Nama AI di baris sendiri */
+    margin-bottom: 5px;
+    font-family: 'Space Grotesk', sans-serif;
+}
+
+/* Style Pesan User */
+.user-msg {
+    color: #fff;
+    text-align: right;
+    align-self: flex-end; /* Nempel kanan */
+    background: rgba(255, 255, 255, 0.05); /* Background tipis banget */
+    padding: 10px 20px;
+    border-radius: 12px;
+    max-width: 80%; /* User max 80% layar biar beda */
+}
+
+/* --- INPUT AREA --- */
+.input-area-wrapper {
+    display: flex;
+    gap: 15px;
+    background: rgba(0, 0, 0, 0.6); /* Gelap dikit biar teks input kebaca */
+    backdrop-filter: blur(10px);
+    padding: 15px;
+    border-radius: 16px;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+.input-box-style {
+    flex-grow: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.prompt-icon {
+    color: var(--primary-green);
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+#user-input {
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-size: 1.1rem;
+    outline: none;
+    font-family: 'Outfit', sans-serif;
+}
+
+.btn-send-style {
+    background: var(--primary-green);
+    color: #000;
+    border: none;
+    padding: 0 25px;
+    border-radius: 8px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+.btn-send-style:hover { transform: scale(1.05); box-shadow: 0 0 15px var(--primary-green); }
+
+/* Responsive HP */
+@media (max-width: 600px) {
+    .container { width: 100%; padding: 10px; }
+    .chat-area-transparent { padding: 0 5px; height: 55vh; }
+    .message { font-size: 1rem; }
+    .input-area-wrapper { flex-direction: column; gap: 10px; }
+    .btn-send-style { width: 100%; padding: 12px; }
+}
+
+/* --- CONTAINER UTAMA (SLIDER) --- */
+.project-slider {
+    display: flex; /* Berjajar ke samping */
+    overflow-x: auto; /* Aktifkan scroll samping */
+    gap: 20px; /* Jarak antar kartu */
+    padding: 20px 5px; /* Ruang napas */
+    
+    /* Efek Magnet (Snap) */
+    scroll-snap-type: x mandatory; 
+    -webkit-overflow-scrolling: touch; /* Biar smooth di iPhone */
+    
+    /* Sembunyikan Scrollbar biar rapi */
+    scrollbar-width: none; /* Firefox */
+}
+.project-slider::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
+}
+
+/* --- TAMPILAN KARTU PROYEK --- */
+.project-item {
+    /* Biar kartu tidak mengecil */
+    flex: 0 0 85%; /* Lebar 85% layar HP biar kelihatan ada kartu sebelahnya dikit */
+    max-width: 400px; /* Batas lebar di PC */
+    
+    /* Efek Magnet */
+    scroll-snap-align: center;
+    
+    /* Desain Glassmorphism */
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(57, 255, 20, 0.2);
+    border-radius: 20px;
+    padding: 25px;
+    text-decoration: none;
+    color: white;
+    transition: all 0.3s ease;
+    
+    /* Tata Letak Isi */
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+/* Efek saat Disentuh */
+.project-item:hover {
+    background: rgba(57, 255, 20, 0.1);
+    border-color: #39FF14;
+    transform: scale(1.02);
+}
+
+/* --- VARIATION: SANTRI THEME (Opsional - Warna Emas/Hijau Tua) --- */
+.santri-theme {
+    border-color: rgba(255, 215, 0, 0.3); /* Emas tipis */
+}
+.santri-theme:hover {
+    background: rgba(255, 215, 0, 0.1); /* Background Emas pudar */
+    border-color: #FFD700;
+}
+
+/* Tipografi di dalam kartu */
+.project-item h3 {
+    margin: 0;
+    font-family: 'Space Grotesk', sans-serif;
+    color: #39FF14;
+    font-size: 1.2rem;
+}
+/* Ubah warna judul khusus Santri jadi Emas */
+.santri-theme h3 {
+    color: #FFD700; 
+}
+
+.project-item p {
+    margin: 0;
+    font-size: 0.9rem;
+    opacity: 0.8;
+    line-height: 1.4;
+}
+
+.card-icon {
+    font-size: 2rem;
+    margin-bottom: 5px;
+}
+
+.btn-text {
+    margin-top: 10px;
+    font-weight: bold;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
